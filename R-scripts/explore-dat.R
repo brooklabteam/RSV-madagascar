@@ -37,6 +37,9 @@ p1 <- ggplot(data=dat.long) +
 
 #and join together as one long time series
 dat.long$date <- as.Date(paste(dat.long$week, dat.long$year, 'Mon'), '%U %Y %a')
+head(dat.long)
+
+subset(dat.long, is.na(date))
 
 #and plot the long time series
 p2 <- ggplot(data=dat.long) + geom_line(aes(x=date, y=count)) + theme_bw() +
