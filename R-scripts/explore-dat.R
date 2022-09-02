@@ -41,6 +41,9 @@ head(dat.long)
 
 subset(dat.long, is.na(date))
 
+#are these epiweeks? yes
+head(cut.Date(dat.long$date, breaks = "week", start.on.monday = T))
+
 #and plot the long time series
 p2 <- ggplot(data=dat.long) + geom_line(aes(x=date, y=count)) + theme_bw() +
       theme(axis.title.x = element_blank(), 
