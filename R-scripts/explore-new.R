@@ -38,6 +38,9 @@ dat$age_round <- round(dat$age,0)
 dat$year <- year(dat$sampling_date)
 dat.pos <- subset(dat, RSV==1 & !is.na(age))
 max(dat.pos$age_round) #75
+
+unique(dat.pos$year)
+
 dat.split <- dlply(dat.pos,.(year))
 
 #and get cumulative incidence by age
@@ -47,7 +50,9 @@ get.cuminc <- function(df){
   age.list = 0:75
   
   df.out <- cbind.data.frame(age=age.list)
-  df.sum <- ddply(df,.(age), summarise, cases = sum(RSV))
+  
+  df.sum <- ddply(df,.(age_round), summarise, cases = sum(RSV))
+  names(df.sum)[names(df.sum)=="age_round"] <- "age"
   
   df.out <- merge(df.out, df.sum, by="age", all.x = T)
   df.out$cases[is.na(df.out$cases)] <- 0
