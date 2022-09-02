@@ -91,11 +91,35 @@ ggsave(file = paste0(homewd, "/figures/cum-prop-cases.png"),
        dpi=200)
 
 # lots of "risk factor" analysis to do
-# what is the odds ratio of infection by year, by sex, by age?
+# what is the odds ratio of infection by year, by sex, by age, by month?
 # first, need to know purpose of sampling set
 # and need to find those years where we are missing age data and DDN
 
+#binomial
+head(dat)
+dat$month <- month(dat$sampling_date)
+dat$RSV <- as.numeric(dat$RSV)
+m1 <- glm(RSV ~year + month + age + sex, data=dat, family="binomial")
+summary(m1)
 
+library(mgcv)
+dat$year
+dat$month <- as.numeric(dat$month)
+dat$sex <- as.factor(dat$sex)
+gam1 <- gam(RSV ~ year + 
+                  s(month, bs="cc")  + 
+                  #s(age, bs="tp")+ 
+                  s(sex, bs="re"), 
+                  data=dat, 
+                  family="binomial")
+summary(gam1)
+
+plot(gam1)
+
+df.pred <- cbind.data.frame(pred= predict.gam(gam1, type="response", exclude=c("s(month)", "s(age)", "s(sex)")))
+df.pred$year <- dat$year
+
+with(df.pred, plot(year, pred, type="l"))
 
 # then, plot the climate data
 clim.dat <- read.csv(file = paste0(homewd, "/data/POWER_Point_Daily_20110101_20220731_Tsiry.csv"))
