@@ -17,6 +17,104 @@ dat <- dplyr::select(dat, -(X))
 dat$DDN <- as.Date(dat$DDN)
 dat$sampling_date <- as.Date(dat$sampling_date)
 
+
+#now plot cases by time and fit a gam describing seasonality
+dat$doy <- yday(dat$sampling_date)
+head(dat)
+dat$epimonth <- cut.Date(dat$sampling_date, breaks="month")
+
+dat.sum <- ddply(dat, .(epimonth), summarise, cases = sum(RSV), tested=length(RSV)) 
+dat.sum$prevalence <- dat.sum$cases/dat.sum$tested
+head(dat.sum)
+dat.sum$epimonth <- as.Date(dat.sum$epimonth)
+
+#prevalence by month
+p1<- ggplot(data=dat.sum) + geom_point(aes(x=epimonth, y=prevalence, size=tested)) +
+     geom_line(aes(x=epimonth, y=prevalence))
+print(p1)
+
+head(dat.sum)
+
+
+#test for seasonality
+head(dat)
+
+gam1 <- gam(cbind(), data = dat.)
+
+
+#just cases
+dat$epiweek <- cut.Date(dat$sampling_date, breaks="week", start.on.monday = T)
+
+dat.sum <- ddply(dat, .(epiweek), summarise, cases = sum(RSV), tested=length(RSV)) 
+dat.sum$prevalence <- dat.sum$cases/dat.sum$tested
+head(dat.sum)
+dat.sum$epiweek <- as.Date(dat.sum$epiweek)
+
+
+p2<- ggplot(data=dat.sum) + geom_point(aes(x=epiweek, y=cases, size=tested)) +
+  geom_line(aes(x=epiweek, y=cases))
+print(p2)
+
+
+#plot proportion by week
+
+p3<- ggplot(data=dat.sum) + geom_point(aes(x=epiweek, y=prevalence, size=tested)) +
+     geom_line(aes(x=epiweek, y=prevalence))
+print(p3)
+
+dat.sum$year <- year(dat.sum$epiweek)
+dat.sum$year <- as.factor(dat.sum$year)
+dat.sum$doy <-yday(dat.sum$epiweek)
+head(dat.sum)
+p4<- ggplot(data=dat.sum) + geom_point(aes(x=doy, y=prevalence, size=tested, color=year)) +
+  geom_line(aes(x=doy, y=prevalence, color=year))
+print(p4)
+
+
+
+#also look at cases
+p5<- ggplot(data=dat.sum) + geom_point(aes(x=doy, y=cases, size=tested, color=year)) +
+  geom_line(aes(x=doy, y=cases, color=year))
+print(p5)
+
+dat.sum$negative <- dat.sum$tested-dat.sum$cases
+
+#question: is prevalence increasing in time?
+dat.sum$year <- as.numeric(as.character(dat.sum$year))
+
+gam1 <- gam(cbind(cases, negative) ~ year + s(doy, k=7, bs="cc"), family= "binomial", data = dat.sum)
+
+summary(gam1)
+
+plot(gam1)
+
+
+new.dat <- cbind.data.frame(doy = 1:365, year=2022)
+plot(predict.gam(gam1, newdata =new.dat,type="response", exclude = "year"))
+
+
+
+m1 <- gam(crude.case.numbers ~ year + s(month, k=7, bs="cc"),
+          family="poisson",data = dat)
+
+library(WaveletComp)
+
+anal.dat <-  analyze.wavelet(dat.sum,
+                                my.series = 4,
+                                #loess.span = 0,
+                                dt = 1,#these are biwks
+                                dj = 1/250,
+                                lowerPeriod = 1,
+                                upperPeriod = 494,
+                                make.pval = TRUE, n.sim = 10)
+
+wt.image(anal.dat, color.key = "quantile", n.levels = 250,
+         legend.params = list(lab = "wavelet power levels", mar = 4.7),
+         label.time.axis = TRUE)
+         #spec.time.axis = list(at = seq(1, round(529/11,0), 11),
+          #                     labels = 2011:2022))
+
+
 #replace those commas
 dat$age <- sub(",", ".", dat$age)
 unique(dat$age)
@@ -28,6 +126,8 @@ unique(dat$DDN[!is.na(dat$age)])
 
 #fill in the missing ages
 dat$age[is.na(dat$age)] <- (dat$sampling_date[is.na(dat$age)] - dat$DDN[is.na(dat$age)])/365
+
+
 
 #a bunch still don't have ages...
 subset(dat, is.na(age))
@@ -94,20 +194,6 @@ ggsave(file = paste0(homewd, "/figures/cum-prop-cases.png"),
        height=50, 
        scale=3, 
        dpi=200)
-
-
-#does the age distribution change with time? can you calculate 
-#foi changes with time? 
-
-
-head(dat.inc)
-
-head(dat)
-
-#get average age by year???
-dat.age <- ddply(dat, .(year), summarise, mean_age = mean(age, na.rm=T))
-
-ggplot(dat.age) + geom_point(aes(x=year, y=mean_age)) + geom_line(aes(x=year, y=mean_age))
 
 # lots of "risk factor" analysis to do
 # what is the odds ratio of infection by year, by sex, by age, by month?
