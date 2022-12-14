@@ -76,11 +76,47 @@ Fig1Ab<- ggplot(data=dat.sum) + geom_point(aes(x=epimonth, y=cases_by_hospital, 
   scale_size_continuous(name="specimens\ntested", breaks = c(10,100,200)) + ylab("cases per reporting hospital") +
   theme(panel.grid = element_blank(), axis.title.y = element_text(size = 18),
         axis.title.x = element_blank(), axis.text = element_text(size = 14), 
-        legend.direction = "horizontal", legend.position = c(.2,.9), 
+        legend.direction = "horizontal", legend.position = c(.35,.9), 
         legend.background  = element_rect(color="black"),
-        plot.margin = unit(c(.1,.1,1.1,.1), "cm"))
+        plot.margin = unit(c(.1,.1,1.1,.9), "cm"))
 
 print(Fig1Ab)
+
+
+# Now also try to plot the cases by week of year to visualize seasonality
+# Add year, week, month
+dat$year <- as.factor(year(dat$sampling_date))
+dat$week <- week(dat$sampling_date)
+dat$month <- month(dat$sampling_date)
+
+# Now summarize by month or week of year
+dat.wk <- ddply(dat, .(year, week), summarise, cases = sum(RSV), tested=length(RSV))
+dat.wk$prevalence <- dat.wk$cases/dat.wk$tested
+dat.wk$cases_by_hospital <- dat.wk$cases/2
+dat.wk$cases_by_hospital[dat.wk$year==2022] <- dat.wk$cases[dat.wk$year==2022]/3
+
+dat.month <- ddply(dat, .(year, month), summarise, cases = sum(RSV), tested=length(RSV))
+dat.month$prevalence <- dat.month$cases/dat.month$tested
+dat.month$cases_by_hospital <- dat.month$cases/2
+dat.month$cases_by_hospital[dat.month$year==2022] <- dat.month$cases[dat.month$year==2022]/3
+
+# by month (best)
+Fig1Ba <- ggplot(data=dat.month) + geom_point(aes(x=month, y=cases_by_hospital, color=year), size=1.5) +
+  geom_line(aes(x=month, y=cases_by_hospital, color=year)) + ylab("cases per reporting hospital") +
+  xlab("month of year") + theme_bw() +
+  scale_x_continuous(breaks=c(1:12), labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +
+  theme(panel.grid = element_blank(), axis.title.y = element_text(size = 18),
+        axis.title.x = element_blank(), axis.text = element_text(size = 13), 
+        legend.title = element_blank(),
+        legend.direction = "vertical", legend.position = c(.8,.7), 
+        #legend.background  = element_rect(color="black"),
+        plot.margin = unit(c(.1,.1,1.1,.9), "cm")) + 
+  guides(color=guide_legend(ncol = 2))
+
+
+# by week
+Fig1Bb <- ggplot(data=dat.wk) + geom_point(aes(x=week, y=cases_by_hospital, color=year)) +
+  geom_line(aes(x=week, y=cases_by_hospital, color=year))
 
 
 ## Now build a GAM to test for predictors of positive cases, especially seasonality
@@ -155,8 +191,8 @@ plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", 
 #
 
 
-# Now, because a bunch of data were missing age and sex,
-# go ahead and redo the GAM with only day of year and year as predictors
+# Now, because a bunch of data were missing age and sex, so
+# go ahead and redo the GAM with only day of year and year as predictors!
 gam2 <- gam(RSV~s(doy, bs="tp") +
                 s(year, bs="re"),
                 data=dat,
@@ -172,8 +208,8 @@ year.df <- get_partial_effects(fit=gam2, var = "year")
 # Here is a better plot of seasonality within a single year:
 plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = T) #seasonal pattern
 
-# Save this as one of your panels:
-Fig1B <- plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = T) #seasonal pattern
+#let's save this panel for the final plot
+Fig1D <- plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = T) #seasonal pattern
 
 # And here is a measure of the years that have significant impacts on RSV positivity:
 plot.partial(df=year.df,  var="year", response_var = "RSV positivity") #a few high years, a few low years
@@ -183,12 +219,9 @@ plot.partial(df=year.df,  var="year", response_var = "RSV positivity") #a few hi
 Fig1C <- plot.partial(df=year.df,  var="year", response_var = "RSV positivity") 
 
 # Now combine together to make Figure 1
+# use cases per hospital version of panel A and month version of panel B
 
-# Let's include the age panel data from the first GAM. But would be BETTER to 
-# have age data for every individual in the dataset
-Fig1D <- plot.partial.cont(df=age.df, log=F, var="age", response_var = "RSV positivity", alt_var ="age", legend.on = F) 
-
-Fig1 <- cowplot::plot_grid(Fig1Aa, Fig1B, Fig1C, Fig1D, nrow = 2, ncol = 2, labels=c("A", "B", "C", "D"), label_size = 22)
+Fig1 <- cowplot::plot_grid(Fig1Ab, Fig1Ba, Fig1C, Fig1D, nrow = 2, ncol = 2, labels=c("A", "B", "C", "D"), label_size = 22)
 
 
 
