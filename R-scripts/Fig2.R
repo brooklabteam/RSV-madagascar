@@ -1,0 +1,223 @@
+rm(list=ls())
+
+library(ggplot2)
+library(lubridate)
+library(plyr)
+library(dplyr)
+library(mgcv)
+library(reshape2)
+
+
+homewd="/Users/carabrook/Developer/RSV-madagascar"
+# Tsiry, here add your own directory in place of mine:
+#homewd="path_to_Tsiry_directory"
+setwd(homewd)
+
+# Figure 3
+# calculate the lag of different climate predictors vs. the 
+# case data. First, you will need to construct a time series, 
+# with case data and the climate predictors for the same 
+# timestep.
+
+# load case data
+dat <- read.csv(file=paste0(homewd,"/data/Tsiry_RSV_data_2011-2022_Update.csv"))
+
+head(dat)
+
+#clean and resort
+names(dat) <-c("num_viro", "DDN", "age", "sex", "RSV", "X", "sampling_date")
+dat <- dplyr::select(dat, -(X))
+dat$DDN <- as.Date(dat$DDN)
+dat$sampling_date <- as.Date(dat$sampling_date)
+
+#calculate the epidemic week (week + year)
+dat$epiweek <- as.Date(as.character(cut.Date(dat$sampling_date, breaks="week")))
+
+#sum cases by month
+dat.sum <- ddply(dat, .(epiweek), summarise, cases = sum(RSV), tested=length(RSV)) 
+
+#calculate prevalence by month
+dat.sum$prevalence <- dat.sum$cases/dat.sum$tested
+
+#calculate year of sampling
+dat.sum$year <- year(dat.sum$epiweek)
+
+#add the cases by hospital
+# 1 before 2020
+dat.sum$cases_by_hospital <- dat.sum$cases
+# 2 from 2020 to end July 2022
+dat.sum$cases_by_hospital[dat.sum$epiweek>"2020-01-01" & dat.sum$epiweek<"2022-07-31"] <- dat.sum$cases_by_hospital[dat.sum$epiweek>"2020-01-01" & dat.sum$epiweek<="2022-07-31"]/2
+# 3 from August 2022 til now
+dat.sum$cases_by_hospital[dat.sum$epiweek>"2022-07-31"] <- dat.sum$cases_by_hospital[dat.sum$epiweek>"2022-07-31"]/3
+
+#look at your data
+head(dat.sum)
+
+#now load the climate data and bring it in
+#load the climate data and transform dates for epidemic year prior
+clim.dat <- read.csv(file = paste0(homewd, "/data/POWER_Point_Daily_20110101_20220731_Tsiry.csv"))
+head(clim.dat)
+
+#make a date column
+clim.dat$MO[clim.dat$MO<10] <- paste0("0", clim.dat$MO[clim.dat$MO<10])
+unique(clim.dat$MO)
+clim.dat$D[clim.dat$D<10] <- paste0("0", clim.dat$D[clim.dat$D<10])
+clim.dat$date <- as.Date(paste0(clim.dat$YEAR, "-", clim.dat$MO, "-", clim.dat$DY))
+
+head(clim.dat)
+
+#get epiweek for the climate data
+clim.dat$epiweek <- as.Date(cut.Date(clim.dat$date, breaks="week"))
+
+#summarise by epiweek
+clim.sum <- ddply(clim.dat, .(epiweek), summarise,
+                                        meanTempMin = mean(T2M_MIN), 
+                                        meanTempMax=mean(T2M_MAX), 
+                                        mean_precip = mean(PRECTOTCORR),
+                                        mean_H2M = mean(RH2M))
+
+head(clim.sum)
+
+#now merge with your case data
+merge.dat <- merge(dat.sum, clim.sum, by="epiweek")
+
+head(merge.dat)
+
+#melt your data to plot the climate with the case data
+merge.melt <- melt(merge.dat, id.vars = c("epiweek"))
+
+head (merge.melt)
+#names(merge.melt)[names(merge.melt)=="variable"] <- "climate_variable"
+
+# and plot these together - temp and cases
+case.dat1 = subset(merge.melt, variable=="cases_by_hospital")
+case.dat1$variable <- "meanTempMin"
+case.dat2 = subset(merge.melt, variable=="cases_by_hospital")
+case.dat2$variable <- "meanTempMax"
+case.dat3 = subset(merge.melt, variable=="cases_by_hospital")
+case.dat3$variable <- "mean_precip"
+case.dat4 = subset(merge.melt, variable=="cases_by_hospital")
+case.dat4$variable <- "mean_H2M"
+
+case.dat <- rbind(case.dat1, case.dat2, case.dat3, case.dat4)
+head(case.dat)
+unique(case.dat$variable)
+Fig2left <- ggplot(data=subset(merge.melt, variable=="meanTempMin" |variable=="meanTempMax" |variable=="mean_precip" |variable=="mean_H2M")) + 
+  geom_line(data=case.dat, aes(x=epiweek, y=value),  size=1, alpha=.2) +
+  geom_point(data=case.dat, aes(x=epiweek, y=value), size=3, alpha=.2) +
+  geom_point(aes(x=epiweek, y=value, color=variable),  size=3, show.legend = F) +
+  geom_line(aes(x=epiweek, y=value, color=variable),  size=1, show.legend = F) +
+  facet_grid(variable~., scales = "free") + ylim(c(0, NA)) +
+  theme_bw() + theme(legend.position = c(.2,.87), panel.grid = element_blank(),
+                     legend.title = element_blank(),
+                     axis.title = element_blank(), 
+                     strip.text = element_text(size=14),
+                     strip.background = element_rect(fill="white"),
+                     legend.text = element_text(size=12),
+                     plot.margin = unit(c(.2,.1,1.3,1.1), "lines"),
+                     axis.text = element_text(size=14))
+
+
+#and look for the cross correlations
+#plot and get the printout
+print(ccf(merge.dat$mean_precip, merge.dat$cases_by_hospital))
+
+#save as data
+dat.lag <- cbind.data.frame(lag = print(ccf(merge.dat$mean_precip, merge.dat$cases_by_hospital))$lag, acf=print(ccf(merge.dat$mean_precip, merge.dat$cases_by_hospital))$acf)
+dat.lag$variable <- "mean_precip"
+
+#what is the optimal lag?
+dat.lag$lag[dat.lag$acf==max(dat.lag$acf)]
+# -3 is maximized cross correlation: 
+# so precip precedes cases by 3 epiweeks
+
+# and what about temp ?
+dat2 = cbind.data.frame(lag = print(ccf(merge.dat$meanTempMin, merge.dat$cases_by_hospital))$lag, acf=print(ccf(merge.dat$meanTempMin, merge.dat$cases_by_hospital))$acf)
+dat2$variable <- "meanTempMin"
+dat2$lag[dat2$acf==max(dat2$acf)]
+# -5 is maximized cross correlation
+# cases follow min temp by 5 weeks
+
+#max temp too?
+dat3 = cbind.data.frame(lag = print(ccf(merge.dat$meanTempMax, merge.dat$cases_by_hospital))$lag, acf=print(ccf(merge.dat$meanTempMax, merge.dat$cases_by_hospital))$acf)
+dat3$variable <- "meanTempMax"
+dat3$lag[dat3$acf==max(dat3$acf)]
+# -14 is maximized cross correlation
+# cases follow max temp by 14 weeks
+
+#and humidity
+dat4 = cbind.data.frame(lag = print(ccf(merge.dat$mean_H2M, merge.dat$cases_by_hospital))$lag, acf=print(ccf(merge.dat$mean_H2M, merge.dat$cases_by_hospital))$acf)
+dat4$variable <- "mean_H2M"
+dat4$lag[dat4$acf==max(dat4$acf)]
+# 1 only
+# cases follow mean H2M by 1 week
+
+
+#save together
+dat.lag <- rbind(dat.lag, dat2, dat3, dat4)
+
+write.csv(dat.lag, file=paste0(homewd, "/data/lag_output.csv"), row.names = F)
+
+
+#and plot acf
+#include the optimal lag on plot
+max.lag <- dlply(dat.lag, .(variable))
+get.lag <- function(df){
+  lag = df$lag[df$acf==max(df$acf)]
+  df.out = cbind.data.frame(variable=unique(df$variable), lag=lag)
+  return(df.out)
+}
+max.lag <- data.table::rbindlist(lapply(max.lag, get.lag))
+max.lag$label = paste0("lag=", max.lag$lag, " epiwks")
+
+Fig2right <- ggplot(dat.lag) + geom_label(data=max.lag, aes(x=18,y=.4, label=label), label.size = 0) +
+             geom_bar(aes(x=lag, y=acf), stat = "identity") + ylim(c(NA,.45)) +
+             geom_hline(aes(yintercept=.1), color="blue", linetype=2) +
+             geom_hline(aes(yintercept=-.1), color="blue", linetype=2) +
+             facet_grid(variable~.) + theme_bw() + theme(legend.position = c(.2,.87), panel.grid = element_blank(),
+                                                         legend.title = element_blank(),
+                                                         axis.title = element_text(size=16),
+                                                         strip.background = element_rect(fill="white"),
+                                                         strip.text = element_text(size=14),
+                                                         legend.text = element_text(size=12),
+                                                         plot.margin = unit(c(.2,.1,.1,1.1), "lines"),
+                                                         axis.text = element_text(size=14))
+
+
+Fig2 <- cowplot::plot_grid(Fig2left, Fig2right, rel_widths = c(1,1.1), nrow = 1, ncol = 2, labels = c("A", "B"), label_size = 22)
+
+
+ggsave(file = paste0(homewd, "/figures/Fig2.png"),
+       plot = Fig2,
+       units="mm",  
+       width=80, 
+       height=100, 
+       scale=3, 
+       dpi=300)
+
+
+
+#try shifting and plotting
+merge.dat$humid_shift = c(merge.dat$mean_H2M[2:length(merge.dat$mean_H2M)], merge.dat$mean_H2M[1])
+out.H2shift = print(ccf(merge.dat$humid_shift, merge.dat$cases_by_hospital))
+out.H2shift$lag[which(out.H2shift$acf==max(out.H2shift$acf))] # 0! the lag is gone
+
+#plot as regression with random effect of year
+library(lme4)
+merge.dat$year <- as.factor(merge.dat$year)
+m1a <- lm(cases_by_hospital~mean_H2M, data=merge.dat)
+summary(m1a)
+
+m1 <- lmer(cases_by_hospital~mean_H2M + (1|year), data=merge.dat)
+summary(m1)
+
+m2a <- lm(cases_by_hospital~humid_shift, data=merge.dat)
+summary(m2a)
+
+m2 <- lmer(cases_by_hospital~humid_shift + (1|year), data=merge.dat)
+summary(m2)
+
+AIC(m1a, m1, m2a, m2) #m2 best: mixed effects with regression
+
+ggplot(data=merge.dat) + 
+  geom_point(aes(x=humid_shift, y=cases_by_hospital))
