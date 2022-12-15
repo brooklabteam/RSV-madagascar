@@ -255,7 +255,7 @@ plot.partial.cont <- function(df, log, var, response_var, alt_var, legend.on){
              axis.title = element_text(size=18),
              axis.text = element_text(size=14),
              plot.margin = unit(c(.1,.1,.5,1), "cm"),
-             legend.position = c(.85,.85))+
+             legend.position = c(.15,.15))+
       ylab(paste0("partial effect on ", response_var)) + xlab(alt_var)
     
     
@@ -276,7 +276,7 @@ plot.partial.cont <- function(df, log, var, response_var, alt_var, legend.on){
       theme(panel.grid = element_blank(), #axis.title.x = element_blank(),
             #axis.text.x = element_text(size=8, angle = 45),
             plot.margin = unit(c(.1,.1,.5,1), "cm"),
-            legend.position = c(.85,.85))+
+            legend.position = c(.15,.15))+
       ylab(paste0("partial effect on ", response_var)) + xlab(alt_var)
   }}else{
       if(log==F){
@@ -295,7 +295,7 @@ plot.partial.cont <- function(df, log, var, response_var, alt_var, legend.on){
                 axis.title = element_text(size=18),
                 axis.text = element_text(size=14),
                 plot.margin = unit(c(.1,.1,.5,1), "cm"),
-                legend.position = c(.85,.85))+
+                legend.position = c(.15,.15))+
           ylab(paste0("partial effect on ", response_var)) + xlab(alt_var)
         
         
@@ -316,7 +316,7 @@ plot.partial.cont <- function(df, log, var, response_var, alt_var, legend.on){
           theme(panel.grid = element_blank(), #axis.title.x = element_blank(),
                 #axis.text.x = element_text(size=8, angle = 45),
                 plot.margin = unit(c(.1,.1,.5,1), "cm"), 
-                legend.position = c(.85,.85))+
+                legend.position = c(.15,.15))+
           ylab(paste0("partial effect on ", response_var)) + xlab(alt_var)
       }
   }

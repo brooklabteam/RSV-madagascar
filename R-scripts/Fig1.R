@@ -65,10 +65,12 @@ print(Fig1Aa)
 # Also calculate cases by reporting hospital
 # There were 2 hospitals for most of the time series, 
 # so this is just the number of cases divided by 2
-dat.sum$cases_by_hospital <- dat.sum$cases/2
+dat.sum$cases_by_hospital <- dat.sum$cases
 
-# Then, in 2022, you had 3 hospitals so you replace here
-dat.sum$cases_by_hospital[dat.sum$year==2022] <- dat.sum$cases[dat.sum$year==2022]/3
+# Then from 2020 to July 2022, you had 2 hospitals
+dat.sum$cases_by_hospital[dat.sum$epimonth>="2020-01-01" & dat.sum$epimonth<"2022-08-01"] <-dat.sum$cases_by_hospital[dat.sum$epimonth>="2020-01-01" & dat.sum$epimonth<"2022-08-01"]/2
+dat.sum$cases_by_hospital[dat.sum$epimonth>="2022-08-01"] <-dat.sum$cases_by_hospital[dat.sum$epimonth>="2022-08-01"]/3
+
 
 # Now plot cases by hospital
 Fig1Ab<- ggplot(data=dat.sum) + geom_point(aes(x=epimonth, y=cases_by_hospital, size=tested)) +
@@ -133,7 +135,9 @@ dat$sampling_date <- as.Date(dat$sampling_date)
 
 # Clean data to remove your incorrect variables
 # Sex can only be M or F
-dat$sex[dat$sex=="H" | dat$sex=="I" | dat$sex=="ND"] <- NA
+dat$sex[dat$sex=="H"] <- "M"
+dat$sex[ dat$sex=="I" | dat$sex=="ND"] <- NA
+
 
 # Make sex a factor
 dat$sex <- as.factor(dat$sex)
@@ -147,8 +151,16 @@ dat$year <- as.factor(dat$year)
 dat$age <- gsub(x=dat$age, pattern= ",", replacement =  ".", fixed = T )
 dat$age <- as.numeric(dat$age)
 
+dat$DDN <- as.Date(dat$DDN)
+# where you have DDN but not age, you can fill in age
+dat$age[is.na(dat$age) & !is.na(dat$DDN)] <- (dat$sampling_date[is.na(dat$age) & !is.na(dat$DDN)] - dat$DDN[is.na(dat$age) & !is.na(dat$DDN)])/365
+
+#dat$year <- as.numeric(as.character(dat$year))
+dat$year <- as.factor(dat$year)
+
 # Run GAM with all predictors
 gam1 <- gam(RSV~s(doy, bs="tp") + 
+                #s(year, bs="tp") +
                 s(year, bs="re") +
                 s(age, bs="tp") +
                 s(sex, bs="re"),
@@ -157,7 +169,8 @@ gam1 <- gam(RSV~s(doy, bs="tp") +
 
 summary(gam1)
 
-#n=1245 because a bunch of daat are missing sex or age
+#n=3802 because a few are missing sex or age
+
 
 
 # The summary shows a significant effect of  doy, year (as a random effect),
@@ -171,24 +184,38 @@ source(paste0(homewd, "/R-scripts/mollentze-streicker-2020-functions.R"))
 age.df <- get_partial_effects_continuous(gamFit = gam1, var="age")
 doy.df <- get_partial_effects_continuous(gamFit = gam1, var="doy")
 sex.df <- get_partial_effects(fit=gam1, var = "sex")
+#year.df <- get_partial_effects_continuous(gamFit=gam1, var = "year")
 year.df <- get_partial_effects(fit=gam1, var = "year")
 
 # And plot each partial effect
 plot.partial(df=sex.df, var="sex", response_var = "RSV positivity") 
 # Sex here is not significant
 
+# save as panel E
+Fig1E <- plot.partial(df=sex.df, var="sex", response_var = "RSV positivity") 
+
 plot.partial(df=year.df, var="year", response_var = "RSV positivity")
-# 2 years show significant deviations. We are missing later years because they are not accompanied by age data
+#plot.partial.cont(df=year.df, log=F, var="year", response_var = "RSV positivity", alt_var ="year", legend.on = TRUE) 
+# 3 years show significant deviations. 
+
+#save as panel C
+Fig1C <- plot.partial(df=year.df, var="year", response_var = "RSV positivity")
 
 plot.partial.cont(df=age.df, log=F, var="age", response_var = "RSV positivity", alt_var ="age", legend.on = TRUE) 
 # Significant trend with age shows that higher ages have decreased association 
 # with RSV positivity (disease is a disease of kids)
+
+#save as panel F
+Fig1F <- plot.partial.cont(df=age.df, log=F, var="age", response_var = "RSV positivity", alt_var ="age", legend.on = TRUE) 
 
 plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = T) #seasonal pattern
 # Here is the pattern of positivity by day of year - 
 # we see that positive cases are found between day 1 and ~90 and negative the rest of the
 # year.
 #
+
+#save as panel D
+Fig1D <- plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = F) #seasonal pattern
 
 
 # Now, because a bunch of data were missing age and sex, so
@@ -201,27 +228,30 @@ gam2 <- gam(RSV~s(doy, bs="tp") +
 summary(gam2) 
 # both are significant
 
-# Calculate partial effects
-doy.df <- get_partial_effects_continuous(gamFit = gam2, var="doy")
-year.df <- get_partial_effects(fit=gam2, var = "year")
-
-# Here is a better plot of seasonality within a single year:
-plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = T) #seasonal pattern
-
-#let's save this panel for the final plot
-Fig1D <- plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = T) #seasonal pattern
-
-# And here is a measure of the years that have significant impacts on RSV positivity:
-plot.partial(df=year.df,  var="year", response_var = "RSV positivity") #a few high years, a few low years
-
-#This looks great too! Are there climatic reasons for the years that are significantly 
-# higher or lower????
-Fig1C <- plot.partial(df=year.df,  var="year", response_var = "RSV positivity") 
+#But, compare models
+AIC(gam1, gam2)# gam1 is A LOT better, so let's use it
+# 
+# # Calculate partial effects
+# doy.df <- get_partial_effects_continuous(gamFit = gam2, var="doy")
+# year.df <- get_partial_effects(fit=gam2, var = "year")
+# 
+# # Here is a better plot of seasonality within a single year:
+# plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = T) #seasonal pattern
+# 
+# #let's save this panel for the final plot
+# Fig1D <- plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = T) #seasonal pattern
+# 
+# # And here is a measure of the years that have significant impacts on RSV positivity:
+# plot.partial(df=year.df,  var="year", response_var = "RSV positivity") #a few high years, a few low years
+# 
+# #This looks great too! Are there climatic reasons for the years that are significantly 
+# # higher or lower????
+# Fig1C <- plot.partial(df=year.df,  var="year", response_var = "RSV positivity") 
 
 # Now combine together to make Figure 1
 # use cases per hospital version of panel A and month version of panel B
 
-Fig1 <- cowplot::plot_grid(Fig1Ab, Fig1Ba, Fig1C, Fig1D, nrow = 2, ncol = 2, labels=c("A", "B", "C", "D"), label_size = 22)
+Fig1 <- cowplot::plot_grid(Fig1Ab, Fig1Ba, Fig1C, Fig1D, Fig1E, Fig1F, nrow = 3, ncol = 2, labels=c("A", "B", "C", "D", "E", "F"), label_size = 22)
 
 
 
@@ -229,6 +259,6 @@ ggsave(file = paste0(homewd, "/figures/Fig1.png"),
        plot = Fig1,
        units="mm",  
        width=90, 
-       height=70, 
+       height=100, 
        scale=3, 
        dpi=300)

@@ -73,11 +73,16 @@ clim.dat$epiweek <- as.Date(cut.Date(clim.dat$date, breaks="week"))
 clim.sum <- ddply(clim.dat, .(epiweek), summarise,
                                         meanTempMin = mean(T2M_MIN), 
                                         meanTempMax=mean(T2M_MAX), 
-                                        mean_precip = mean(PRECTOTCORR),
+                                        sum_precip = sum(PRECTOTCORR),
                                         mean_H2M = mean(RH2M))
 
 head(clim.sum)
 
+#average the two temperatures
+clim.sum$meanTemp <- rowMeans(cbind(clim.sum$meanTempMin, clim.sum$meanTempMax))
+
+#drop the other min/max temp
+clim.sum <- dplyr::select(clim.sum, -(meanTempMin), -(meanTempMax))
 #now merge with your case data
 merge.dat <- merge(dat.sum, clim.sum, by="epiweek")
 
@@ -91,18 +96,16 @@ head (merge.melt)
 
 # and plot these together - temp and cases
 case.dat1 = subset(merge.melt, variable=="cases_by_hospital")
-case.dat1$variable <- "meanTempMin"
+case.dat1$variable <- "meanTemp"
 case.dat2 = subset(merge.melt, variable=="cases_by_hospital")
-case.dat2$variable <- "meanTempMax"
+case.dat2$variable <- "sum_precip"
 case.dat3 = subset(merge.melt, variable=="cases_by_hospital")
-case.dat3$variable <- "mean_precip"
-case.dat4 = subset(merge.melt, variable=="cases_by_hospital")
-case.dat4$variable <- "mean_H2M"
+case.dat3$variable <- "mean_H2M"
 
-case.dat <- rbind(case.dat1, case.dat2, case.dat3, case.dat4)
+case.dat <- rbind(case.dat1, case.dat2, case.dat3)
 head(case.dat)
 unique(case.dat$variable)
-Fig2left <- ggplot(data=subset(merge.melt, variable=="meanTempMin" |variable=="meanTempMax" |variable=="mean_precip" |variable=="mean_H2M")) + 
+Fig2left <- ggplot(data=subset(merge.melt, variable=="meanTemp" |variable=="sum_precip" |variable=="mean_H2M")) + 
   geom_line(data=case.dat, aes(x=epiweek, y=value),  size=1, alpha=.2) +
   geom_point(data=case.dat, aes(x=epiweek, y=value), size=3, alpha=.2) +
   geom_point(aes(x=epiweek, y=value, color=variable),  size=3, show.legend = F) +
@@ -120,11 +123,11 @@ Fig2left <- ggplot(data=subset(merge.melt, variable=="meanTempMin" |variable=="m
 
 #and look for the cross correlations
 #plot and get the printout
-print(ccf(merge.dat$mean_precip, merge.dat$cases_by_hospital))
+print(ccf(merge.dat$sum_precip, merge.dat$cases_by_hospital))
 
 #save as data
-dat.lag <- cbind.data.frame(lag = print(ccf(merge.dat$mean_precip, merge.dat$cases_by_hospital))$lag, acf=print(ccf(merge.dat$mean_precip, merge.dat$cases_by_hospital))$acf)
-dat.lag$variable <- "mean_precip"
+dat.lag <- cbind.data.frame(lag = print(ccf(merge.dat$sum_precip, merge.dat$cases_by_hospital))$lag, acf=print(ccf(merge.dat$sum_precip, merge.dat$cases_by_hospital))$acf)
+dat.lag$variable <- "sum_precip"
 
 #what is the optimal lag?
 dat.lag$lag[dat.lag$acf==max(dat.lag$acf)]
@@ -132,29 +135,23 @@ dat.lag$lag[dat.lag$acf==max(dat.lag$acf)]
 # so precip precedes cases by 3 epiweeks
 
 # and what about temp ?
-dat2 = cbind.data.frame(lag = print(ccf(merge.dat$meanTempMin, merge.dat$cases_by_hospital))$lag, acf=print(ccf(merge.dat$meanTempMin, merge.dat$cases_by_hospital))$acf)
-dat2$variable <- "meanTempMin"
+dat2 = cbind.data.frame(lag = print(ccf(merge.dat$meanTemp, merge.dat$cases_by_hospital))$lag, acf=print(ccf(merge.dat$meanTemp, merge.dat$cases_by_hospital))$acf)
+dat2$variable <- "meanTemp"
 dat2$lag[dat2$acf==max(dat2$acf)]
-# -5 is maximized cross correlation
-# cases follow min temp by 5 weeks
+# -6 is maximized cross correlation
+# cases follow temp by 6 weeks
 
-#max temp too?
-dat3 = cbind.data.frame(lag = print(ccf(merge.dat$meanTempMax, merge.dat$cases_by_hospital))$lag, acf=print(ccf(merge.dat$meanTempMax, merge.dat$cases_by_hospital))$acf)
-dat3$variable <- "meanTempMax"
-dat3$lag[dat3$acf==max(dat3$acf)]
-# -14 is maximized cross correlation
-# cases follow max temp by 14 weeks
 
 #and humidity
-dat4 = cbind.data.frame(lag = print(ccf(merge.dat$mean_H2M, merge.dat$cases_by_hospital))$lag, acf=print(ccf(merge.dat$mean_H2M, merge.dat$cases_by_hospital))$acf)
-dat4$variable <- "mean_H2M"
-dat4$lag[dat4$acf==max(dat4$acf)]
+dat3 = cbind.data.frame(lag = print(ccf(merge.dat$mean_H2M, merge.dat$cases_by_hospital))$lag, acf=print(ccf(merge.dat$mean_H2M, merge.dat$cases_by_hospital))$acf)
+dat3$variable <- "mean_H2M"
+dat3$lag[dat3$acf==max(dat3$acf)]
 # 1 only
 # cases follow mean H2M by 1 week
 
 
 #save together
-dat.lag <- rbind(dat.lag, dat2, dat3, dat4)
+dat.lag <- rbind(dat.lag, dat2, dat3)
 
 write.csv(dat.lag, file=paste0(homewd, "/data/lag_output.csv"), row.names = F)
 
@@ -190,8 +187,8 @@ Fig2 <- cowplot::plot_grid(Fig2left, Fig2right, rel_widths = c(1,1.1), nrow = 1,
 ggsave(file = paste0(homewd, "/figures/Fig2.png"),
        plot = Fig2,
        units="mm",  
-       width=80, 
-       height=100, 
+       width=90, 
+       height=80, 
        scale=3, 
        dpi=300)
 
