@@ -193,28 +193,49 @@ ggsave(file = paste0(homewd, "/figures/Fig2.png"),
        dpi=300)
 
 
+head(merge.dat)
 
-#try shifting and plotting
-merge.dat$humid_shift = c(merge.dat$mean_H2M[2:length(merge.dat$mean_H2M)], merge.dat$mean_H2M[1])
-out.H2shift = print(ccf(merge.dat$humid_shift, merge.dat$cases_by_hospital))
-out.H2shift$lag[which(out.H2shift$acf==max(out.H2shift$acf))] # 0! the lag is gone
+#make a new dataset with the lagged versions of these climate variables
+# we can't start cases at timestep 1 because they are only predicted by all three variables starting
+# at timestep 7 (because the lag for temp is 6).
 
-#plot as regression with random effect of year
-library(lme4)
-merge.dat$year <- as.factor(merge.dat$year)
-m1a <- lm(cases_by_hospital~mean_H2M, data=merge.dat)
-summary(m1a)
+#temp first
+merge.shift <- merge.dat[7: length(merge.dat$epiweek),]
+merge.shift$meantempLag <- merge.dat$meanTemp[1:(length(merge.dat$meanTemp)-6)]
 
-m1 <- lmer(cases_by_hospital~mean_H2M + (1|year), data=merge.dat)
+#humid stays as is
+
+#lag precip by 3
+merge.shift$precip_lag <- merge.dat$sum_precip[4:(length(merge.dat$sum_precip)-3)]
+
+
+head(merge.shift)
+
+#now, make a linear model predicting cases
+merge.shift$n_hospitals <- 1
+merge.shift$n_hospitals[merge.shift$epiweek>="2020-01-01" & merge.shift$epiweek< "2022-08-01"] <- 2
+merge.shift$n_hospitals[merge.shift$epiweek>= "2022-08-01"] <- 3
+
+#save new lagged data
+write.csv(merge.shift, file = paste0(homewd, "/data/lagged-dat.csv"), row.names = F)
+
+#first try no predictor by year
+
+m1 <- glm(cases~n_hospitals + mean_H2M + meantempLag + precip_lag, data = merge.shift, family = "poisson")
 summary(m1)
 
-m2a <- lm(cases_by_hospital~humid_shift, data=merge.dat)
-summary(m2a)
+library(sjPlot)
 
-m2 <- lmer(cases_by_hospital~humid_shift + (1|year), data=merge.dat)
+#then try with year as a random effect
+merge.shift$year <- as.factor(merge.shift$year)
+library(lme4)
+
+m2 <- glmer(cases~n_hospitals + mean_H2M + meantempLag + precip_lag + (1|year),data = merge.shift, family = "poisson")
 summary(m2)
 
-AIC(m1a, m1, m2a, m2) #m2 best: mixed effects with regression
+AIC(m1, m2) #m2 is better
 
-ggplot(data=merge.dat) + 
-  geom_point(aes(x=humid_shift, y=cases_by_hospital))
+#ideally, you would add package sjPlot
+#plot model output
+
+plot_model(m2)
