@@ -124,6 +124,8 @@ Fig2left <- ggplot(data=subset(merge.melt, variable=="meanTemp" |variable=="sum_
 #and look for the cross correlations
 #plot and get the printout
 print(ccf(merge.dat$sum_precip, merge.dat$cases_by_hospital))
+# 95% CI at 0.09
+
 
 #save as data
 dat.lag <- cbind.data.frame(lag = print(ccf(merge.dat$sum_precip, merge.dat$cases_by_hospital))$lag, acf=print(ccf(merge.dat$sum_precip, merge.dat$cases_by_hospital))$acf)
@@ -140,6 +142,7 @@ dat2$variable <- "meanTemp"
 dat2$lag[dat2$acf==max(dat2$acf)]
 # -6 is maximized cross correlation
 # cases follow temp by 6 weeks
+# 95% CI at 0.09
 
 
 #and humidity
@@ -148,6 +151,7 @@ dat3$variable <- "mean_H2M"
 dat3$lag[dat3$acf==max(dat3$acf)]
 # 1 only
 # cases follow mean H2M by 1 week
+# 95% CI at 0.09
 
 
 #save together
@@ -169,8 +173,8 @@ max.lag$label = paste0("lag=", max.lag$lag, " epiwks")
 
 Fig2right <- ggplot(dat.lag) + geom_label(data=max.lag, aes(x=18,y=.4, label=label), label.size = 0) +
              geom_bar(aes(x=lag, y=acf), stat = "identity") + ylim(c(NA,.45)) +
-             geom_hline(aes(yintercept=.1), color="blue", linetype=2) +
-             geom_hline(aes(yintercept=-.1), color="blue", linetype=2) +
+             geom_hline(aes(yintercept=0.09), color="blue", linetype=2) +
+             geom_hline(aes(yintercept=-0.09), color="blue", linetype=2) +
              facet_grid(variable~.) + theme_bw() + theme(legend.position = c(.2,.87), panel.grid = element_blank(),
                                                          legend.title = element_blank(),
                                                          axis.title = element_text(size=16),
