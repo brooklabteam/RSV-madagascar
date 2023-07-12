@@ -63,12 +63,14 @@ print(Fig1Aa)
 
 
 # Also calculate cases by reporting hospital
-# There were 2 hospitals for most of the time series, 
-# so this is just the number of cases divided by 2
+# There was 1 hospitals for most of the time series, 
+# so this is just the number of cases
 dat.sum$cases_by_hospital <- dat.sum$cases
 
 # Then from 2020 to July 2022, you had 2 hospitals
 dat.sum$cases_by_hospital[dat.sum$epimonth>="2020-01-01" & dat.sum$epimonth<"2022-08-01"] <-dat.sum$cases_by_hospital[dat.sum$epimonth>="2020-01-01" & dat.sum$epimonth<"2022-08-01"]/2
+
+# And from August 2022 onward, you had 3 hospitals
 dat.sum$cases_by_hospital[dat.sum$epimonth>="2022-08-01"] <-dat.sum$cases_by_hospital[dat.sum$epimonth>="2022-08-01"]/3
 
 
