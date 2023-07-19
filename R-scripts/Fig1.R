@@ -7,10 +7,13 @@ library(dplyr)
 library(mgcv)
 
 
+
+
 homewd="/Users/carabrook/Developer/RSV-madagascar"
 # Tsiry, here add your own directory in place of mine:
 #homewd="path_to_Tsiry_directory"
 setwd(homewd)
+
 
 # Figure 1
 # panel A: plot case prevalence, organized by month OR
@@ -18,97 +21,116 @@ setwd(homewd)
 # (2 for all years but 3 for 2022)
 
 #and load data - first the age-structured
-dat <- read.csv(file=paste0(homewd,"/data/Tsiry_RSV_data_2011-2022_Update.csv"))
+dat <- read.csv(file=paste0(homewd,"/data/rsv_data_update_2011_2022.csv"))
 
 head(dat)
-names(dat) <-c("num_viro", "DDN", "age", "sex", "RSV", "X", "sampling_date")
+names(dat) <-c("num_viro", "DDN", "age", "sex", "RSV", "X", "sampling_date", "hospital")
 dat <- dplyr::select(dat, -(X))
-dat$DDN <- as.Date(dat$DDN)
-dat$sampling_date <- as.Date(dat$sampling_date)
+unique(dat$DDN)
+dat$DDN <- as.Date(dat$DDN,  format = "%m/%d/%y")
+sort(unique(dat$DDN))
+unique(dat$sampling_date)
 
 
+#correct DDN for those with dates over 2022
+dat$DDN[dat$DDN>as.Date("2021-12-31") & !is.na(dat$DDN)] <- as.Date(paste0((as.numeric(sapply(strsplit(as.character(dat$DDN[dat$DDN>as.Date("2021-12-31") & !is.na(dat$DDN)]), split="-"),'[',1))-100), "-", sapply(strsplit(as.character(dat$DDN[dat$DDN>as.Date("2021-12-31")& !is.na(dat$DDN)]), split="-"),'[',2), "-", sapply(strsplit(as.character(dat$DDN[dat$DDN>as.Date("2021-12-31")& !is.na(dat$DDN)]), split="-"),'[',3)))
+
+dat$sampling_date <- as.Date(dat$sampling_date, format = "%m/%d/%y")
+
+head(dat)
+unique(dat$hospital)
+dat$hospital[dat$hospital=="CENHOSOA "] <- "CENHOSOA"
+dat$hospital[dat$hospital=="CSMI TSL"] <- "CSMI-TSL"
+nrow(subset(dat, hospital== "")) #25 with no hospital ID
+#remove from dataset
+dat = subset(dat, hospital!="") #4152
 #now plot cases by time and fit a gam describing seasonality
 
 #calculate the day of year
 dat$doy <- yday(dat$sampling_date)
 
 
-#calculate the epidemic month (month + year)
-dat$epimonth <- as.Date(as.character(cut.Date(dat$sampling_date, breaks="month")))
+#calculate the epidemic week
+dat$epiweek <- as.Date(as.character(cut.Date(dat$sampling_date, breaks="week")))
 
-#sum cases by month
-dat.sum <- ddply(dat, .(epimonth), summarise, cases = sum(RSV), tested=length(RSV)) 
+#sum cases by week
+dat.sum <- ddply(dat, .(epiweek), summarise, cases = sum(RSV), tested=length(RSV)) 
 
-#calculate prevalence by month
+#calc how many cases tested at each hospital each year
+dat$year <- year(dat$epiweek)
+calc.hosp <- ddply(dat, .(year, hospital), summarise, cases=sum(RSV), tested=length(RSV))
+N.year <- ddply(dat, .(year), summarise, yearly_cases=sum(RSV), yearly_tested=length(RSV))
+
+calc.hosp <- merge(calc.hosp, N.year, by="year", all.x = T)
+calc.hosp$percent_cases = calc.hosp$cases/calc.hosp$yearly_cases
+calc.hosp$percent_cases = calc.hosp$tested/calc.hosp$yearly_tested
+
+#most cases drom CENHOSOA
+
+#what percent of testing belonged to each hospital each year
+
+percent.hosp <- ddply(calc.hosp,.(year), summarise, cases=sum(cases), tested=sum(tested))
+
+percent.hosp$prevalence = percent.hosp$cases/percent.hosp$tested
+
+
+
+percent.hosp <- ddply(calc.hosp, .(hospital), summarise, cases=sum(cases), tested=sum(tested))
+#only one data point from 2010 with no hospital identifier
+
+#most of these cases are from CENHOSOA but a few are not
+ggplot(data=calc.hosp) + geom_line(aes(x=year, y=tested, color=hospital))
+ggplot(data=calc.hosp) + geom_line(aes(x=year, y=cases, color=hospital))
+
+#calculate prevalence by week
 dat.sum$prevalence <- dat.sum$cases/dat.sum$tested
 
 #calculate year of sampling
-dat.sum$year <- year(dat.sum$epimonth)
+dat.sum$year <- year(dat.sum$epiweek)
 
+#limit years 
+dat.sum <- subset(dat.sum, year>2010 & year<2022)
 
 #look at your data
 head(dat.sum)
 
 
-# plot prevalence by month
-Fig1Aa<- ggplot(data=dat.sum) + geom_point(aes(x=epimonth, y=prevalence, size=tested)) +
-         geom_line(aes(x=epimonth, y=prevalence)) + theme_bw() + 
+# plot prevalence by week
+Fig1A <- ggplot(data=dat.sum) + geom_point(aes(x=epiweek, y=prevalence, size=tested)) +
+         geom_line(aes(x=epiweek, y=prevalence)) + theme_bw() + 
          scale_size_continuous(name="specimens\ntested", breaks = c(10,100,200)) + ylab("prevalence RSV") +
          theme(panel.grid = element_blank(), axis.title.y = element_text(size = 18),
                axis.title.x = element_blank(), axis.text = element_text(size = 14), 
                legend.direction = "horizontal", legend.position = c(.7,.9), 
                legend.background  = element_rect(color="black"), 
                plot.margin = unit(c(.1,.1,1.1,.1), "cm"))
-print(Fig1Aa)
+print(Fig1A)
 
-
-# Also calculate cases by reporting hospital
-# There was 1 hospitals for most of the time series, 
-# so this is just the number of cases
-dat.sum$cases_by_hospital <- dat.sum$cases
-
-# Then from 2020 to July 2022, you had 2 hospitals
-dat.sum$cases_by_hospital[dat.sum$epimonth>="2020-01-01" & dat.sum$epimonth<"2022-08-01"] <-dat.sum$cases_by_hospital[dat.sum$epimonth>="2020-01-01" & dat.sum$epimonth<"2022-08-01"]/2
-
-# And from August 2022 onward, you had 3 hospitals
-dat.sum$cases_by_hospital[dat.sum$epimonth>="2022-08-01"] <-dat.sum$cases_by_hospital[dat.sum$epimonth>="2022-08-01"]/3
-
-
-# Now plot cases by hospital
-Fig1Ab<- ggplot(data=dat.sum) + geom_point(aes(x=epimonth, y=cases_by_hospital, size=tested)) +
-  geom_line(aes(x=epimonth, y=cases_by_hospital)) + theme_bw() + 
-  scale_size_continuous(name="specimens\ntested", breaks = c(10,100,200)) + ylab("cases per reporting hospital") +
-  theme(panel.grid = element_blank(), axis.title.y = element_text(size = 18),
-        axis.title.x = element_blank(), axis.text = element_text(size = 14), 
-        legend.direction = "horizontal", legend.position = c(.35,.9), 
-        legend.background  = element_rect(color="black"),
-        plot.margin = unit(c(.1,.1,1.1,.9), "cm"))
-
-print(Fig1Ab)
+# 
+# # Also plot raw cases - these don't account for increased sampling effort in some years
+# Fig1Ab<- ggplot(data=dat.sum) + geom_point(aes(x=epiweek, y=cases, size=tested)) +
+#   geom_line(aes(x=epiweek, y=cases)) + theme_bw() + 
+#   scale_size_continuous(name="specimens\ntested", breaks = c(10,100,200)) + ylab("cases in catchment") +
+#   theme(panel.grid = element_blank(), axis.title.y = element_text(size = 18),
+#         axis.title.x = element_blank(), axis.text = element_text(size = 14), 
+#         legend.direction = "horizontal", legend.position = c(.15,.9), 
+#         legend.background  = element_rect(color="black"),
+#         plot.margin = unit(c(.1,.1,1.1,.9), "cm"))
+# 
+# print(Fig1Ab)
 
 
 # Now also try to plot the cases by week of year to visualize seasonality
-# Add year, week, month
-dat$year <- as.factor(year(dat$sampling_date))
-dat$week <- week(dat$sampling_date)
-dat$month <- month(dat$sampling_date)
+# These will instead go into Figure 2
 
-# Now summarize by month or week of year
-dat.wk <- ddply(dat, .(year, week), summarise, cases = sum(RSV), tested=length(RSV))
-dat.wk$prevalence <- dat.wk$cases/dat.wk$tested
-dat.wk$cases_by_hospital <- dat.wk$cases/2
-dat.wk$cases_by_hospital[dat.wk$year==2022] <- dat.wk$cases[dat.wk$year==2022]/3
+dat.sum$week_of_year <- week(dat.sum$epiweek)
+dat.sum$year <- as.factor(dat.sum$year)
 
-dat.month <- ddply(dat, .(year, month), summarise, cases = sum(RSV), tested=length(RSV))
-dat.month$prevalence <- dat.month$cases/dat.month$tested
-dat.month$cases_by_hospital <- dat.month$cases/2
-dat.month$cases_by_hospital[dat.month$year==2022] <- dat.month$cases[dat.month$year==2022]/3
-
-# by month (best)
-Fig1Ba <- ggplot(data=dat.month) + geom_point(aes(x=month, y=cases_by_hospital, color=year), size=1.5) +
-  geom_line(aes(x=month, y=cases_by_hospital, color=year)) + ylab("cases per reporting hospital") +
+# by week - scaling by test amount
+Fig2Aa <- ggplot(data=dat.sum) + geom_point(aes(x=week_of_year, y=cases, color=year, size=tested)) +
+  geom_line(aes(x=week_of_year, y=cases, color=year))+ ylab("cases in catchment") +
   xlab("month of year") + theme_bw() +
-  scale_x_continuous(breaks=c(1:12), labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +
+  scale_x_continuous(breaks=seq(1,52,4.5), labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +
   theme(panel.grid = element_blank(), axis.title.y = element_text(size = 18),
         axis.title.x = element_blank(), axis.text = element_text(size = 13), 
         legend.title = element_blank(),
@@ -116,24 +138,29 @@ Fig1Ba <- ggplot(data=dat.month) + geom_point(aes(x=month, y=cases_by_hospital, 
         #legend.background  = element_rect(color="black"),
         plot.margin = unit(c(.1,.1,1.1,.9), "cm")) + 
   guides(color=guide_legend(ncol = 2))
+print(Fig2Aa)
 
-
-# by week
-Fig1Bb <- ggplot(data=dat.wk) + geom_point(aes(x=week, y=cases_by_hospital, color=year)) +
-  geom_line(aes(x=week, y=cases_by_hospital, color=year))
-
+#no scaling - use this one
+Fig2A <- ggplot(data=dat.sum) + geom_point(aes(x=week_of_year, y=cases, color=year)) +
+  geom_line(aes(x=week_of_year, y=cases, color=year))+ ylab("cases in catchment") +
+  xlab("month of year") + theme_bw() +
+  scale_x_continuous(breaks=seq(1,52,4.5), labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +
+  theme(panel.grid = element_blank(), axis.title.y = element_text(size = 18),
+        axis.title.x = element_blank(), axis.text = element_text(size = 13), 
+        legend.title = element_blank(),
+        legend.direction = "vertical", legend.position = c(.8,.7), 
+        #legend.background  = element_rect(color="black"),
+        plot.margin = unit(c(.1,.1,1.1,.9), "cm")) + 
+  guides(color=guide_legend(ncol = 2))
+print(Fig2A)
 
 ## Now build a GAM to test for predictors of positive cases, especially seasonality
-## You should add data of reporting hospital when you find int because
-## each hospital might have different seasonal patterns.
 ## Start by including all predictors
 
 # Look at data
 head(dat) 
 dat$RSV
 
-# Record the date as a date class
-dat$sampling_date <- as.Date(dat$sampling_date)
 
 # Clean data to remove your incorrect variables
 # Sex can only be M or F
@@ -144,123 +171,370 @@ dat$sex[ dat$sex=="I" | dat$sex=="ND"] <- NA
 # Make sex a factor
 dat$sex <- as.factor(dat$sex)
 
-# Calculate year of sampling and make a factor
+# Calculate year of sampling and keep as continuous
 dat$year <- year(dat$sampling_date)
-dat$year <- as.factor(dat$year)
 
-# Clean age to get rid of the commas
+
+# Clean age 
 # Can we fill in the blank here for the missing data?
-dat$age <- gsub(x=dat$age, pattern= ",", replacement =  ".", fixed = T )
-dat$age <- as.numeric(dat$age)
+unique(dat$age)
 
-dat$DDN <- as.Date(dat$DDN)
 # where you have DDN but not age, you can fill in age
 dat$age[is.na(dat$age) & !is.na(dat$DDN)] <- (dat$sampling_date[is.na(dat$age) & !is.na(dat$DDN)] - dat$DDN[is.na(dat$age) & !is.na(dat$DDN)])/365
+unique(dat$age)
+subset(dat, age<0) 
 
-#dat$year <- as.numeric(as.character(dat$year))
 dat$year <- as.factor(dat$year)
 
+
+head(dat)
+dat$hospital <- as.factor(dat$hospital)
+dat$year <- as.numeric(as.character(dat$year))
+unique(dat$hospital)
+
+
 # Run GAM with all predictors
-gam1 <- gam(RSV~s(doy, bs="tp") + 
-                #s(year, bs="tp") +
-                s(year, bs="re") +
+gam1 <- gam(RSV~s(doy, bs="cc") + 
+                s(year, bs="tp") +
+                #s(year, bs="re") +
                 s(age, bs="tp") +
+                s(hospital, bs="re") +
                 s(sex, bs="re"),
                 data=dat,
                 family = "binomial")
 
 summary(gam1)
 
-#n=3802 because a few are missing sex or age
+#n=3777 because a few are missing sex or age.
+#total N=4152
 
 
-
-# The summary shows a significant effect of  doy, year (as a random effect),
-# age, and sex is minimally significant
+# doy, year, age and hospital have significant effects here
+# sex is not significant
 
 
 # Now, load prior script to calculate and plot random effects:
 source(paste0(homewd, "/R-scripts/mollentze-streicker-2020-functions.R"))
 
+#load plotting functions
+plot.partial <- function(df, var, response_var){
+  df1 = df$effects
+  df2= df$partialResiduals
+  #head(df2)
+  
+  #head(df1)
+  names(df1)[names(df1)==var] <- "var"
+  names(df2)[names(df2)==var] <- "var"
+  
+  fillz = c("No"="gray70", "Yes" = "skyblue3")
+  
+  
+  p2 <- ggplot(data=df2, aes(var,  Residual)) +
+       geom_boxplot(aes(var~Residual))
+  
+  p1 <- ggplot(data=df1, aes(var, y)) + 
+    geom_crossbar(aes(ymin=ylower, ymax=yupper, fill=IsSignificant), 
+                  alpha=.4, show.legend = F) +
+    #geom_point(aes(x=var, y=y, color=var), size=5) +
+    #geom_jitter(data=df2, aes(x=var, y=Residual), width=.1, alpha=.2, size=.3)+
+    scale_fill_manual(values = fillz) +
+    geom_hline(aes(yintercept=0), linetype=2) + theme_bw() +
+    theme(panel.grid = element_blank(), axis.title.x = element_blank(),
+          axis.text = element_text(size=14, angle = 90),
+          axis.title.y = element_text(size=18, angle = 90),
+          legend.text = element_text(size=10),
+          plot.margin = unit(c(.1,.1,.5,1), "cm"))+
+    ylab(paste0("partial effect on ", response_var)) 
+  
+  #print(p1)
+  
+  return(p1)
+}
+plot.partial.cont <- function(df, log, var, response_var, alt_var, legend.on){
+  df1 = df$effects
+  df2= df$partialResiduals
+  #head(df2)
+  
+  #head(df1)
+  names(df1)[names(df1)==var] <- "var"
+  names(df2)[names(df2)==var] <- "var"
+  
+  fillz = c("No"="gray70", "Yes" = "skyblue3")
+  
+  
+  #p2 <- ggplot(data=df2, aes(var,  Residual)) +
+  #     geom_boxplot(aes(var~Residual))
+  if(legend.on==TRUE){
+    if(log==F){
+      
+      p1 <- ggplot(data=df1, aes(var, y)) + 
+        geom_line(aes(color=IsSignificant), size=3)+
+        geom_ribbon(aes(ymin=ylower, ymax=yupper, fill=IsSignificant), 
+                    alpha=.4, show.legend = F) +
+        #geom_point(aes(x=var, y=y, color=var), size=5) +
+        #geom_jitter(data=df2, aes(x=var, y=Residual), width=.1, alpha=.2, size=.3)+
+        scale_fill_manual(values = fillz) +
+        scale_color_manual(values = fillz) +
+        scale_x_continuous(labels=scales::comma) +
+        geom_hline(aes(yintercept=0), linetype=2) + theme_bw() +
+        theme(panel.grid = element_blank(),
+              axis.title = element_text(size=18),
+              axis.text = element_text(size=14),
+              plot.margin = unit(c(.1,.1,.5,1), "cm"),
+              legend.position = c(.15,.15))+
+        ylab(paste0("partial effect on ", response_var)) + xlab(alt_var)
+      
+      
+      
+    }else{
+      df1$var <- 10^(df1$var)
+      
+      p1 <- ggplot(data=df1, aes(var, y)) + 
+        geom_line(aes(color=IsSignificant), size=3)+
+        geom_ribbon(aes(ymin=ylower, ymax=yupper, fill=IsSignificant), 
+                    alpha=.4, show.legend = F) +
+        #geom_point(aes(x=var, y=y, color=var), size=5) +
+        #geom_jitter(data=df2, aes(x=var, y=Residual), width=.1, alpha=.2, size=.3)+
+        scale_fill_manual(values = fillz) +
+        scale_color_manual(values = fillz) +
+        scale_x_continuous(labels=scales::comma) +
+        geom_hline(aes(yintercept=0), linetype=2) + theme_bw() +
+        theme(panel.grid = element_blank(), #axis.title.x = element_blank(),
+              #axis.text.x = element_text(size=8, angle = 45),
+              plot.margin = unit(c(.1,.1,.5,1), "cm"),
+              legend.position = c(.15,.15))+
+        ylab(paste0("partial effect on ", response_var)) + xlab(alt_var)
+    }}else{
+      if(log==F){
+        
+        p1 <- ggplot(data=df1, aes(var, y)) + 
+          geom_line(aes(color=IsSignificant), size=3, show.legend = F)+
+          geom_ribbon(aes(ymin=ylower, ymax=yupper, fill=IsSignificant), 
+                      alpha=.4, show.legend = F) +
+          #geom_point(aes(x=var, y=y, color=var), size=5) +
+          #geom_jitter(data=df2, aes(x=var, y=Residual), width=.1, alpha=.2, size=.3)+
+          scale_fill_manual(values = fillz) +
+          scale_color_manual(values = fillz) +
+          scale_x_continuous(labels=scales::comma) +
+          geom_hline(aes(yintercept=0), linetype=2) + theme_bw() +
+          theme(panel.grid = element_blank(),
+                axis.title = element_text(size=18),
+                axis.text = element_text(size=14),
+                plot.margin = unit(c(.1,.1,.5,1), "cm"),
+                legend.position = c(.15,.15))+
+          ylab(paste0("partial effect on ", response_var)) + xlab(alt_var)
+        
+        
+        
+      }else{
+        df1$var <- 10^(df1$var)
+        
+        p1 <- ggplot(data=df1, aes(var, y)) + 
+          geom_line(aes(color=IsSignificant), size=3, show.legend = F)+
+          geom_ribbon(aes(ymin=ylower, ymax=yupper, fill=IsSignificant), 
+                      alpha=.4, show.legend = F) +
+          #geom_point(aes(x=var, y=y, color=var), size=5) +
+          #geom_jitter(data=df2, aes(x=var, y=Residual), width=.1, alpha=.2, size=.3)+
+          scale_fill_manual(values = fillz) +
+          scale_color_manual(values = fillz) +
+          scale_x_continuous(labels=scales::comma) +
+          geom_hline(aes(yintercept=0), linetype=2) + theme_bw() +
+          theme(panel.grid = element_blank(), #axis.title.x = element_blank(),
+                #axis.text.x = element_text(size=8, angle = 45),
+                plot.margin = unit(c(.1,.1,.5,1), "cm"), 
+                legend.position = c(.15,.15))+
+          ylab(paste0("partial effect on ", response_var)) + xlab(alt_var)
+      }
+    }
+  
+  print(p1)
+  
+  return(p1)
+}
+plot.partial.year <- function(df, log, var, response_var, alt_var, legend.on){
+  df1 = df$effects
+  df2= df$partialResiduals
+  #head(df2)
+  
+  #head(df1)
+  names(df1)[names(df1)==var] <- "var"
+  names(df2)[names(df2)==var] <- "var"
+  
+  fillz = c("No"="gray70", "Yes" = "skyblue3")
+  
+  
+  #p2 <- ggplot(data=df2, aes(var,  Residual)) +
+  #     geom_boxplot(aes(var~Residual))
+  if(legend.on==TRUE){
+    if(log==F){
+      
+      p1 <- ggplot(data=df1, aes(var, y)) + 
+        geom_line(aes(color=IsSignificant), size=3)+
+        geom_ribbon(aes(ymin=ylower, ymax=yupper, fill=IsSignificant), 
+                    alpha=.4, show.legend = F) +
+        #geom_point(aes(x=var, y=y, color=var), size=5) +
+        #geom_jitter(data=df2, aes(x=var, y=Residual), width=.1, alpha=.2, size=.3)+
+        scale_fill_manual(values = fillz) +
+        scale_color_manual(values = fillz) +
+        scale_x_continuous(breaks=seq(2011,2021, by=2)) +
+        geom_hline(aes(yintercept=0), linetype=2) + theme_bw() +
+        theme(panel.grid = element_blank(),
+              axis.title.y = element_text(size=18),
+              axis.title.x = element_blank(),
+              axis.text = element_text(size=14),
+              plot.margin = unit(c(.1,.1,.5,1), "cm"),
+              legend.position = c(.85,.85))+
+        ylab(paste0("partial effect on ", response_var)) + xlab(alt_var) 
+        
+      
+      
+      
+    }else{
+      df1$var <- 10^(df1$var)
+      
+      p1 <- ggplot(data=df1, aes(var, y)) + 
+        geom_line(aes(color=IsSignificant), size=3)+
+        geom_ribbon(aes(ymin=ylower, ymax=yupper, fill=IsSignificant), 
+                    alpha=.4, show.legend = F) +
+        #geom_point(aes(x=var, y=y, color=var), size=5) +
+        #geom_jitter(data=df2, aes(x=var, y=Residual), width=.1, alpha=.2, size=.3)+
+        scale_fill_manual(values = fillz) +
+        scale_color_manual(values = fillz) +
+        scale_x_continuous(breaks=seq(2011,2021, by=2)) +
+        geom_hline(aes(yintercept=0), linetype=2) + theme_bw() +
+        theme(panel.grid = element_blank(),
+              axis.title.y = element_text(size=18),
+              axis.title.x = element_blank(),
+              axis.text = element_text(size=14),
+              plot.margin = unit(c(.1,.1,.5,1), "cm"),
+              legend.position = c(.15,.15))+
+        ylab(paste0("partial effect on ", response_var)) + xlab(alt_var) 
+      
+    }}else{
+      if(log==F){
+        
+        p1 <- ggplot(data=df1, aes(var, y)) + 
+          geom_line(aes(color=IsSignificant), size=3, show.legend = F)+
+          geom_ribbon(aes(ymin=ylower, ymax=yupper, fill=IsSignificant), 
+                      alpha=.4, show.legend = F) +
+          #geom_point(aes(x=var, y=y, color=var), size=5) +
+          #geom_jitter(data=df2, aes(x=var, y=Residual), width=.1, alpha=.2, size=.3)+
+          scale_fill_manual(values = fillz) +
+          scale_color_manual(values = fillz) +
+          scale_x_continuous(breaks=seq(2011,2021, by=2)) +
+          geom_hline(aes(yintercept=0), linetype=2) + theme_bw() +
+          theme(panel.grid = element_blank(),
+                axis.title.y = element_text(size=18),
+                axis.title.x = element_blank(),
+                axis.text = element_text(size=14),
+                plot.margin = unit(c(.1,.1,.5,1), "cm"),
+                legend.position = c(.15,.15))+
+          ylab(paste0("partial effect on ", response_var)) + xlab(alt_var) 
+        
+        
+        
+        
+      }else{
+        df1$var <- 10^(df1$var)
+        
+        p1 <- ggplot(data=df1, aes(var, y)) + 
+          geom_line(aes(color=IsSignificant), size=3, show.legend = F)+
+          geom_ribbon(aes(ymin=ylower, ymax=yupper, fill=IsSignificant), 
+                      alpha=.4, show.legend = F) +
+          #geom_point(aes(x=var, y=y, color=var), size=5) +
+          #geom_jitter(data=df2, aes(x=var, y=Residual), width=.1, alpha=.2, size=.3)+
+          scale_fill_manual(values = fillz) +
+          scale_color_manual(values = fillz) +
+          scale_x_continuous(breaks=seq(2011,2021, by=2)) +
+          geom_hline(aes(yintercept=0), linetype=2) + theme_bw() +
+          theme(panel.grid = element_blank(),
+                axis.title.y = element_text(size=18),
+                axis.title.x = element_blank(),
+                axis.text = element_text(size=14),
+                plot.margin = unit(c(.1,.1,.5,1), "cm"),
+                legend.position = c(.15,.15))+
+          ylab(paste0("partial effect on ", response_var)) + xlab(alt_var) 
+        
+      }
+    }
+  
+  print(p1)
+  
+  return(p1)
+}
+
+
 # Use functions from above script to calculate random effects for each
 age.df <- get_partial_effects_continuous(gamFit = gam1, var="age")
 doy.df <- get_partial_effects_continuous(gamFit = gam1, var="doy")
+year.df <- get_partial_effects_continuous(gamFit=gam1, var = "year")
 sex.df <- get_partial_effects(fit=gam1, var = "sex")
-#year.df <- get_partial_effects_continuous(gamFit=gam1, var = "year")
-year.df <- get_partial_effects(fit=gam1, var = "year")
+hosp.df <- get_partial_effects(fit=gam1, var = "hospital")
 
-# And plot each partial effect
+
+# Sex
 plot.partial(df=sex.df, var="sex", response_var = "RSV positivity") 
 # Sex here is not significant
-
 # save as panel E
 Fig1E <- plot.partial(df=sex.df, var="sex", response_var = "RSV positivity") 
 
-plot.partial(df=year.df, var="year", response_var = "RSV positivity")
-#plot.partial.cont(df=year.df, log=F, var="year", response_var = "RSV positivity", alt_var ="year", legend.on = TRUE) 
-# 3 years show significant deviations. 
+#Hospital
+#remove the one with o 
+plot.partial(df=hosp.df, var="hospital", response_var = "RSV positivity") 
+#no sig terms by partial effect which is good
+# save as panel F
+Fig1F <- plot.partial(df=hosp.df, var="hospital", response_var = "RSV positivity") 
 
-#save as panel C
-Fig1C <- plot.partial(df=year.df, var="year", response_var = "RSV positivity")
+#Year
+plot.partial.year(df=year.df, log=F, var="year", response_var = "RSV positivity", alt_var ="year", legend.on = TRUE)
+#save as panel B
+Fig1B <- plot.partial.year(df=year.df, log=F, var="year", response_var = "RSV positivity", alt_var ="", legend.on = TRUE) 
 
+#Age
 plot.partial.cont(df=age.df, log=F, var="age", response_var = "RSV positivity", alt_var ="age", legend.on = TRUE) 
 # Significant trend with age shows that higher ages have decreased association 
 # with RSV positivity (disease is a disease of kids)
+#save as panel D
+Fig1D <- plot.partial.cont(df=age.df, log=F, var="age", response_var = "RSV positivity", alt_var ="age", legend.on = FALSE) 
 
-#save as panel F
-Fig1F <- plot.partial.cont(df=age.df, log=F, var="age", response_var = "RSV positivity", alt_var ="age", legend.on = TRUE) 
-
+#DOY
 plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = T) #seasonal pattern
 # Here is the pattern of positivity by day of year - 
 # we see that positive cases are found between day 1 and ~90 and negative the rest of the
 # year.
-#
+#save as panel C
+Fig1C <- plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = F) #seasonal pattern
 
-#save as panel D
-Fig1D <- plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = F) #seasonal pattern
+
+
 
 
 # Now, because a bunch of data were missing age and sex, so
 # go ahead and redo the GAM with only day of year and year as predictors!
-gam2 <- gam(RSV~s(doy, bs="tp") +
+gam2 <- gam(RSV~s(doy, bs="cc") +
                 s(year, bs="re"),
                 data=dat,
                 family = "binomial")
 
-summary(gam2) 
-# both are significant
+summary(gam2) # N= 4177 all of the data here
+# only doy is significant here
 
 #But, compare models
 AIC(gam1, gam2)# gam1 is A LOT better, so let's use it
-# 
-# # Calculate partial effects
-# doy.df <- get_partial_effects_continuous(gamFit = gam2, var="doy")
-# year.df <- get_partial_effects(fit=gam2, var = "year")
-# 
-# # Here is a better plot of seasonality within a single year:
-# plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = T) #seasonal pattern
-# 
-# #let's save this panel for the final plot
-# Fig1D <- plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = T) #seasonal pattern
-# 
-# # And here is a measure of the years that have significant impacts on RSV positivity:
-# plot.partial(df=year.df,  var="year", response_var = "RSV positivity") #a few high years, a few low years
-# 
-# #This looks great too! Are there climatic reasons for the years that are significantly 
-# # higher or lower????
-# Fig1C <- plot.partial(df=year.df,  var="year", response_var = "RSV positivity") 
 
-# Now combine together to make Figure 1
-# use cases per hospital version of panel A and month version of panel B
 
-Fig1 <- cowplot::plot_grid(Fig1Ab, Fig1Ba, Fig1C, Fig1D, Fig1E, Fig1F, nrow = 3, ncol = 2, labels=c("A", "B", "C", "D", "E", "F"), label_size = 22)
+Fig1AB <- cowplot::plot_grid(Fig1A, Fig1B, nrow = 1, ncol = 2, labels=c("A", "B"), label_size = 22, align = "hv")
+Fig1CD <- cowplot::plot_grid(Fig1C, Fig1D, nrow = 1, ncol = 2, labels=c("C", "D"), label_size = 22, align = "hv")
+Fig1EF <- cowplot::plot_grid(Fig1E, Fig1F, nrow = 1, ncol = 2, labels=c("E", "F"), label_size = 22, align = "hv")
+
+Fig1 <- cowplot::plot_grid(Fig1AB,Fig1CD, Fig1EF, nrow = 3, ncol = 1, label_size = 22)
 
 
 
 ggsave(file = paste0(homewd, "/figures/Fig1.png"),
        plot = Fig1,
        units="mm",  
-       width=90, 
+       width=100, 
        height=100, 
        scale=3, 
        dpi=300)

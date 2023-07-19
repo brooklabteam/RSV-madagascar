@@ -121,6 +121,10 @@ dat$RSV <- as.numeric(dat$RSV)
 m1 <- glm(RSV ~year + month + age + sex, data=dat, family="binomial")
 summary(m1)
 
+
+#now estimate FOI
+
+
 library(mgcv)
 dat$year
 dat$month <- as.numeric(dat$month)
