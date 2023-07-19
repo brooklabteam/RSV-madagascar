@@ -82,6 +82,20 @@ percent.hosp <- ddply(calc.hosp, .(hospital), summarise, cases=sum(cases), teste
 ggplot(data=calc.hosp) + geom_line(aes(x=year, y=tested, color=hospital))
 ggplot(data=calc.hosp) + geom_line(aes(x=year, y=cases, color=hospital))
 
+#catchment by hospital
+#: BHK(28574), CSMI TSL(43222), MJR(8000), CENHOSOA(89000), CHUMET(43222)
+pop.hospital <- cbind.data.frame(hospital= c("BHK", "CSMI-TSL", "MJR", "CENHOSOA", "CHUMET"), pop=c(28572, 43222, 8000, 89000, 43222))
+
+#and join
+calc.hosp <- merge(calc.hosp, pop.hospital, by="hospital", all.x = T)
+
+# what was population served catchment by year?
+pop.year <- ddply(calc.hosp, .(year), summarise, tot_pop= sum(pop))
+pop.year <- pop.year[complete.cases(pop.year),]
+ggplot(pop.year) + geom_line(aes(year, tot_pop))
+#save this for the tsir
+write.csv(pop.year, file = paste0(homewd, "/data/catchment_pop_by_year.csv"), row.names = F)
+
 #calculate prevalence by week
 dat.sum$prevalence <- dat.sum$cases/dat.sum$tested
 

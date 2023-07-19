@@ -23,9 +23,16 @@ names(pop.vec) <- seq(2009,2022,1) #assume this is census at the end of each yea
 #so one timestep before gives you the population at the beginning of the year
 pop.vec <- c(unlist(pop.vec[which(names(pop.vec)=="2011"):which(names(pop.vec)=="2021")]))
 
+#load pop.vector from the region
+pop.vec <- read.csv(file=paste0(homewd, "/data/catchment_pop_by_year.csv"), header = T, stringsAsFactors = F)
+#load pop.vector from the region
+pop.vec <- pop.vec$tot_pop[2:length(pop.vec$year)]
+names(pop.vec) <- 2011:2021
+
+
 # this is at the national level - now scale down to just 1 hospital catchment in Antananarivo,
 # assuming ~1% of the country pop and constant through the time series
-pop.vec <- pop.vec*.001
+#pop.vec <- pop.vec*.001
 
 birth.vec <- pop.dat[1,5:ncol(pop.dat)]
 names(birth.vec) <- seq(2009,2022,1) #assume this is census at the end of each year,
@@ -37,18 +44,33 @@ birth.vec <- birth.vec[which(names(birth.vec)=="2011"):which(names(birth.vec)=="
 birth.vec = c(unlist(birth.vec*(pop.vec/1000)))
 
 #and load case data - first the age-structured
-dat <- read.csv(file=paste0(homewd,"/data/Tsiry_RSV_data_2011-2022_Update.csv"))
+dat <- read.csv(file=paste0(homewd,"/data/rsv_data_update_2011_2022.csv"))
 
 head(dat)
-names(dat) <-c("num_viro", "DDN", "age", "sex", "RSV", "X", "sampling_date")
+names(dat) <-c("num_viro", "DDN", "age", "sex", "RSV", "X", "sampling_date", 'hospital')
 dat <- dplyr::select(dat, -(X))
-dat$DDN <- as.Date(dat$DDN)
-dat$sampling_date <- as.Date(dat$sampling_date)
+unique(dat$DDN)
+dat$DDN <- as.Date(dat$DDN,  format = "%m/%d/%y")
+sort(unique(dat$DDN))
+unique(dat$sampling_date)
+
+
+#correct DDN for those with dates over 2022
+dat$DDN[dat$DDN>as.Date("2021-12-31") & !is.na(dat$DDN)] <- as.Date(paste0((as.numeric(sapply(strsplit(as.character(dat$DDN[dat$DDN>as.Date("2021-12-31") & !is.na(dat$DDN)]), split="-"),'[',1))-100), "-", sapply(strsplit(as.character(dat$DDN[dat$DDN>as.Date("2021-12-31")& !is.na(dat$DDN)]), split="-"),'[',2), "-", sapply(strsplit(as.character(dat$DDN[dat$DDN>as.Date("2021-12-31")& !is.na(dat$DDN)]), split="-"),'[',3)))
+
+dat$sampling_date <- as.Date(dat$sampling_date, format = "%m/%d/%y")
 
 head(dat)
+unique(dat$hospital)
+dat$hospital[dat$hospital=="CENHOSOA "] <- "CENHOSOA"
+dat$hospital[dat$hospital=="CSMI TSL"] <- "CSMI-TSL"
+nrow(subset(dat, hospital== "")) #25 with no hospital ID
+#remove from dataset
+dat = subset(dat, hospital!="") #4152
+#now plot cases by time and fit a gam describing seasonality
 
-#take positives only!
-#dat = subset(dat, RSV==1)
+#calculate the day of year
+dat$doy <- yday(dat$sampling_date)
 
 
 dat <- dplyr::select(dat, num_viro, sampling_date, RSV)
@@ -118,7 +140,7 @@ head(tsir.dat)
 #correct by reporting hospital - no need if all two hospitals (no 2022)
 
 
-ggplot(tsir.dat) + geom_point(aes(x=time, y=cases)) + geom_line(aes(x=time, y=cases)) + ylab("cases in 2 hospital catchment")
+ggplot(tsir.dat) + geom_point(aes(x=time, y=cases)) + geom_line(aes(x=time, y=cases)) + ylab("cases")
 
 tsir.dat$cases[is.na(tsir.dat$cases)]<- 1
 
@@ -126,11 +148,11 @@ tsir.dat$year <- as.factor(trunc(tsir.dat$time))
 tsir.dat$week <- tsir.dat$time- as.numeric(as.character(tsir.dat$year))
 head(tsir.dat)
 ggplot(tsir.dat) + geom_point(aes(x=week, y=cases, color=year, group=year)) + 
-  geom_line(aes(x=week, y=cases, color=year, group=year)) + ylab("cases in 2 hospital catchment") #consider replotting figure 1b
+  geom_line(aes(x=week, y=cases, color=year, group=year)) + ylab("weekly cases") #consider replotting figure 1b
 
 
 ggplot(tsir.dat) + geom_point(aes(x=week, y=cases, color=year, group=year)) + 
-  geom_line(aes(x=week, y=cases, color=year, group=year)) + ylab("cases in 2 hospital catchment") + facet_wrap(~year)
+  geom_line(aes(x=week, y=cases, color=year, group=year)) + ylab("weekly cases") + facet_wrap(~year)
   
 
 #now fit tsir model to data

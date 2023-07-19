@@ -20,39 +20,121 @@ setwd(homewd)
 # timestep.
 
 # load case data
-dat <- read.csv(file=paste0(homewd,"/data/Tsiry_RSV_data_2011-2022_Update.csv"))
+dat <- read.csv(file=paste0(homewd,"/data/rsv_data_update_2011_2022.csv"))
 
 head(dat)
 
-#clean and resort
-names(dat) <-c("num_viro", "DDN", "age", "sex", "RSV", "X", "sampling_date")
-dat <- dplyr::select(dat, -(X))
-dat$DDN <- as.Date(dat$DDN)
-dat$sampling_date <- as.Date(dat$sampling_date)
 
-#calculate the epidemic week (week + year)
+head(dat)
+names(dat) <-c("num_viro", "DDN", "age", "sex", "RSV", "X", "sampling_date", "hospital")
+dat <- dplyr::select(dat, -(X))
+unique(dat$DDN)
+dat$DDN <- as.Date(dat$DDN,  format = "%m/%d/%y")
+sort(unique(dat$DDN))
+unique(dat$sampling_date)
+
+
+#correct DDN for those with dates over 2022
+dat$DDN[dat$DDN>as.Date("2021-12-31") & !is.na(dat$DDN)] <- as.Date(paste0((as.numeric(sapply(strsplit(as.character(dat$DDN[dat$DDN>as.Date("2021-12-31") & !is.na(dat$DDN)]), split="-"),'[',1))-100), "-", sapply(strsplit(as.character(dat$DDN[dat$DDN>as.Date("2021-12-31")& !is.na(dat$DDN)]), split="-"),'[',2), "-", sapply(strsplit(as.character(dat$DDN[dat$DDN>as.Date("2021-12-31")& !is.na(dat$DDN)]), split="-"),'[',3)))
+
+dat$sampling_date <- as.Date(dat$sampling_date, format = "%m/%d/%y")
+
+head(dat)
+unique(dat$hospital)
+dat$hospital[dat$hospital=="CENHOSOA "] <- "CENHOSOA"
+dat$hospital[dat$hospital=="CSMI TSL"] <- "CSMI-TSL"
+nrow(subset(dat, hospital== "")) #25 with no hospital ID
+#remove from dataset
+dat = subset(dat, hospital!="") #4152
+#now plot cases by time and fit a gam describing seasonality
+
+#calculate the day of year
+dat$doy <- yday(dat$sampling_date)
+
+
+#calculate the epidemic week
 dat$epiweek <- as.Date(as.character(cut.Date(dat$sampling_date, breaks="week")))
 
-#sum cases by month
+#sum cases by week
 dat.sum <- ddply(dat, .(epiweek), summarise, cases = sum(RSV), tested=length(RSV)) 
 
-#calculate prevalence by month
-dat.sum$prevalence <- dat.sum$cases/dat.sum$tested
+#calc how many cases tested at each hospital each year
+dat$year <- year(dat$epiweek)
 
 #calculate year of sampling
 dat.sum$year <- year(dat.sum$epiweek)
 
-#add the cases by hospital
-# 1 before 2020
-dat.sum$cases_by_hospital <- dat.sum$cases
-# 2 from 2020 to end July 2022
-dat.sum$cases_by_hospital[dat.sum$epiweek>"2020-01-01" & dat.sum$epiweek<"2022-07-31"] <- dat.sum$cases_by_hospital[dat.sum$epiweek>"2020-01-01" & dat.sum$epiweek<="2022-07-31"]/2
-# 3 from August 2022 til now
-dat.sum$cases_by_hospital[dat.sum$epiweek>"2022-07-31"] <- dat.sum$cases_by_hospital[dat.sum$epiweek>"2022-07-31"]/3
+#limit years 
+dat.sum <- subset(dat.sum, year>2010 & year<2022)
 
 #look at your data
 head(dat.sum)
 
+# Now also try to plot the cases by week of year to visualize seasonality
+# These will instead go into Figure 2
+
+dat.sum$week_of_year <- week(dat.sum$epiweek)
+dat.sum$year <- as.factor(dat.sum$year)
+
+# by week - scaling by test amount
+Fig2Aa <- ggplot(data=dat.sum) + geom_point(aes(x=week_of_year, y=cases, color=year, size=tested)) +
+  geom_line(aes(x=week_of_year, y=cases, color=year))+ ylab("cases in catchment") +
+  xlab("month of year") + theme_bw() +
+  scale_x_continuous(breaks=seq(1,52,4.5), labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +
+  theme(panel.grid = element_blank(), axis.title.y = element_text(size = 18),
+        axis.title.x = element_blank(), axis.text = element_text(size = 13), 
+        legend.title = element_blank(),
+        legend.direction = "vertical", legend.position = c(.8,.6), 
+        #legend.background  = element_rect(color="black"),
+        plot.margin = unit(c(.1,.1,1.1,.9), "cm")) + 
+  guides(color=guide_legend(ncol = 2))
+print(Fig2Aa)
+
+#no scaling - use this one
+Fig2A <- ggplot(data=dat.sum) + #geom_point(aes(x=week_of_year, y=cases, color=year)) +
+  geom_line(aes(x=week_of_year, y=cases, color=year), size=1)+ ylab("weekly cases") +
+  xlab("month of year") + theme_bw() +
+  scale_x_continuous(breaks=seq(1,52,4.5), labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +
+  theme(panel.grid = element_blank(), axis.title.y = element_text(size = 18),
+        axis.title.x = element_blank(), axis.text = element_text(size = 13), 
+        legend.title = element_blank(),
+        legend.direction = "vertical", legend.position = c(.8,.6), 
+        #legend.background  = element_rect(color="black"),
+        plot.margin = unit(c(.1,.1,1.1,.9), "cm")) + 
+  guides(color=guide_legend(ncol = 2))
+print(Fig2A)
+
+#now add a time column for merging later
+dat.sum$time <- yday(dat.sum$epiweek)/365 + year(dat.sum$epiweek)
+
+#Then, load beta for transmission by week of year (or biweek)
+#load tsir data
+tsir.dat <- read.csv(file = paste0(homewd, "/data/tsir_dat_beta.csv"), header = T, stringsAsFactors = F)
+head(tsir.dat)
+
+beta.dat = subset(tsir.dat, year == 2011)
+
+#Fig 2B - beta by biweek
+tsir.dat$year <- as.factor(tsir.dat$year)
+Fig2B <- ggplot(data=beta.dat) + 
+  geom_ribbon(aes(x=week, ymin=beta_low, ymax=beta_high), alpha=.3) +
+  geom_line(aes(x=week, y=beta), size=1) +
+  ylab(bquote(beta~', transmission')) +
+  xlab("week of year") + theme_bw() +
+  scale_x_continuous(breaks=c(seq(1,52,4.5)/52), labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +
+  theme(panel.grid = element_blank(), axis.title.y = element_text(size = 18),
+        axis.title.x = element_blank(), axis.text = element_text(size = 13), 
+        legend.title = element_blank(),
+        legend.direction = "vertical", legend.position = c(.8,.7), 
+        #legend.background  = element_rect(color="black"),
+        plot.margin = unit(c(.1,.1,1.1,.9), "cm")) + 
+  guides(color=guide_legend(ncol = 2))
+print(Fig2B)
+
+
+Fig2AB = cowplot::plot_grid(Fig2A, Fig2B, ncol=1, nrow=2, align = "hv", labels = c("A", "B"), label_size = 22)
+
+ 
 #now load the climate data and bring it in
 #load the climate data and transform dates for epidemic year prior
 clim.dat <- read.csv(file = paste0(homewd, "/data/POWER_Point_Daily_20110101_20220731_Tsiry.csv"))
@@ -83,52 +165,221 @@ clim.sum$meanTemp <- rowMeans(cbind(clim.sum$meanTempMin, clim.sum$meanTempMax))
 
 #drop the other min/max temp
 clim.sum <- dplyr::select(clim.sum, -(meanTempMin), -(meanTempMax))
-#now merge with your case data
-merge.dat <- merge(dat.sum, clim.sum, by="epiweek")
+
+#make time column and interoplote
+clim.sum$year <- year(clim.sum$epiweek)
+clim.sum$doy <- yday(clim.sum$epiweek)
+clim.sum$time <- clim.sum$year+(clim.sum$doy/365)
+
+merge.dat <- tsir.dat
+head(merge.dat)
+merge.dat$mean_H2M <- approx(x=clim.sum$time, y=clim.sum$mean_H2M, xout = merge.dat$time)$y
+merge.dat$sum_precip <- approx(x=clim.sum$time, y=clim.sum$sum_precip, xout = merge.dat$time)$y
+merge.dat$meanTemp <- approx(x=clim.sum$time, y=clim.sum$meanTemp, xout = merge.dat$time)$y
+#and look at climate through time
 
 head(merge.dat)
 
-#melt your data to plot the climate with the case data
-merge.melt <- melt(merge.dat, id.vars = c("epiweek"))
+library(sjPlot)
+merge.dat$year <- as.numeric(as.character(merge.dat$year))
 
-head (merge.melt)
-#names(merge.melt)[names(merge.melt)=="variable"] <- "climate_variable"
+#precip - increasing
+gam1 <- gam(sum_precip~year +  s(week, k=7, bs="cc"), data=merge.dat)
+summary(gam1) # slight pos trend
+plot_model(gam1, type="pred", grid=T)
 
-# and plot these together - temp and cases
-case.dat1 = subset(merge.melt, variable=="cases_by_hospital")
-case.dat1$variable <- "meanTemp"
-case.dat2 = subset(merge.melt, variable=="cases_by_hospital")
-case.dat2$variable <- "sum_precip"
-case.dat3 = subset(merge.melt, variable=="cases_by_hospital")
-case.dat3$variable <- "mean_H2M"
+#humidity - also increasing
+gam2 <- gam(mean_H2M~year +  s(week, k=7, bs="cc"), data=merge.dat)
+summary(gam2) # slight pos tred
+plot_model(gam2, type="pred", grid=T)
 
-case.dat <- rbind(case.dat1, case.dat2, case.dat3)
-head(case.dat)
-unique(case.dat$variable)
-Fig2left <- ggplot(data=subset(merge.melt, variable=="meanTemp" |variable=="sum_precip" |variable=="mean_H2M")) + 
-  geom_line(data=case.dat, aes(x=epiweek, y=value),  size=1, alpha=.2) +
-  geom_point(data=case.dat, aes(x=epiweek, y=value), size=3, alpha=.2) +
-  geom_point(aes(x=epiweek, y=value, color=variable),  size=3, show.legend = F) +
-  geom_line(aes(x=epiweek, y=value, color=variable),  size=1, show.legend = F) +
-  facet_grid(variable~., scales = "free") + ylim(c(0, NA)) +
-  theme_bw() + theme(legend.position = c(.2,.87), panel.grid = element_blank(),
-                     legend.title = element_blank(),
-                     axis.title = element_blank(), 
-                     strip.text = element_text(size=14),
-                     strip.background = element_rect(fill="white"),
-                     legend.text = element_text(size=12),
-                     plot.margin = unit(c(.2,.1,1.3,1.1), "lines"),
-                     axis.text = element_text(size=14))
+#temp - increasing
+gam3 <- gam(meanTemp~year +  s(week, k=7, bs="cc"), data=merge.dat)
+summary(gam3) # pos trend
+plot_model(gam3, type="pred", grid=T)
 
 
+#what about cases??? decreasing - 
+#contradictory effects of increasing humidity (driving cases down) and increasing precip (driving cases up)
+gam4 <- gam(cases~year +  s(week, k=7, bs="cc"), data=merge.dat)
+summary(gam4) # neg trend
+plot_model(gam4, type="pred", grid=T)
+
+#plot each by year
+clim.dat <- dplyr::select(merge.dat, -(births), -(pop), -(week), -(beta_low), -(beta_high))
+clim.melt <- melt(clim.dat, id.vars = c("time", "year", "week_num"))
+head(clim.melt)
+clim.melt$year <- as.factor(clim.melt$year)
+clim.melt$label <- as.character(clim.melt$variable)
+clim.melt$label[clim.melt$label=="sum_precip"]<-  "sum precipitation (mm)"
+clim.melt$label[clim.melt$label=="meanTemp"] <- "mean temp (*C)"
+clim.melt$label[clim.melt$label=="mean_H2M"] <- "mean humidity (H2M)"
+
+Fig2C <-  ggplot(data=subset(clim.melt, label=="mean temp (*C)")) + 
+                    geom_line(aes(x=week_num, y=value, color=year), size=1, show.legend = F) + 
+                    theme_bw() + scale_x_continuous(breaks=seq(1,52,4.5), labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +
+                    ylab(bquote('mean temp ( '^0~'C)'))+
+                    theme(panel.grid = element_blank(), axis.title.y = element_text(size = 18),
+                    axis.title.x = element_blank(), axis.text = element_text(size = 13), 
+                    #legend.title = element_blank(),
+                    #legend.direction = "vertical", legend.position = c(.8,.7), 
+                    #legend.background  = element_rect(color="black"),
+                    plot.margin = unit(c(.1,.1,1.1,.9), "cm")) 
+
+Fig2D <-  ggplot(data=subset(clim.melt, label=="sum precipitation (mm)")) + 
+  geom_line(aes(x=week_num, y=value, color=year), size=1, show.legend = F) + 
+  theme_bw() + scale_x_continuous(breaks=seq(1,52,4.5), labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +
+  ylab("sum precipitation (mm)")+
+  theme(panel.grid = element_blank(), axis.title.y = element_text(size = 18),
+        axis.title.x = element_blank(), axis.text = element_text(size = 13), 
+        #legend.title = element_blank(),
+        #legend.direction = "vertical", legend.position = c(.8,.7), 
+        #legend.background  = element_rect(color="black"),
+        plot.margin = unit(c(.1,.1,1.1,.9), "cm")) 
+  
+
+Fig2E <-  ggplot(data=subset(clim.melt, label=="mean humidity (H2M)")) + 
+  geom_line(aes(x=week_num, y=value, color=year), size=1, show.legend = F) + 
+  theme_bw() + scale_x_continuous(breaks=seq(1,52,4.5), labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +
+  ylab("mean relative humidity (%)")+
+  theme(panel.grid = element_blank(), axis.title.y = element_text(size = 18),
+        axis.title.x = element_blank(), axis.text = element_text(size = 13), 
+        #legend.title = element_blank(),
+        #legend.direction = "vertical", legend.position = c(.8,.7), 
+        #legend.background  = element_rect(color="black"),
+        plot.margin = unit(c(.1,.1,1.1,.9), "cm")) 
+
+
+Fig2 <- cowplot::plot_grid(Fig2A, Fig2B, Fig2C, Fig2D, Fig2E, ncol=1, nrow=5, align = "hv", labels = c("A", "B","C",  "D", "E"), label_size = 22)
+
+
+ggsave(file = paste0(homewd, "/figures/Fig2.png"),
+       plot = Fig2,
+       units="mm",  
+       width=90, 
+       height=130, 
+       scale=3, 
+       dpi=300)
+
+
+
+
+
+
+#and look 
+
+newFig2<- ggplot(data=subset(clim.melt, label!="beta")) + geom_line(aes(x=week_num, y=value, color=year)) + 
+      facet_grid(label~., scales = "free_y") + 
+      theme_bw() + theme(legend.position = "right", panel.grid = element_blank(),
+      legend.title = element_blank(), axis.title = element_blank(), strip.text = element_text(size=14),
+      strip.background = element_rect(fill="white"),legend.text = element_text(size=12),
+      plot.margin = unit(c(.2,.1,1.3,1.1), "lines"), axis.text = element_text(size=14))
 #and look for the cross correlations
 #plot and get the printout
-print(ccf(merge.dat$sum_precip, merge.dat$cases_by_hospital))
+
+#beta lag - no lag really for the transmission rate -see below
+#so instead we used the exact present timestep, consistent with Rachel
+#regression of humidity and precip and temp on beta
+
+head(merge.dat)
+merge.dat$log_beta <- log(merge.dat$beta)
+
+glm1 <- lm(log_beta~mean_H2M + sum_precip + meanTemp + year, data= merge.dat)
+summary(glm1)
+#tried year as a random effect and got nowhere.
+
+#check best fit model
+library(MuMIn)
+glm1 <- lm(log_beta~mean_H2M + sum_precip + meanTemp + year, data= merge.dat, na.action = na.fail)
+summary(glm1)
+dredge(global.model = glm1) #best fit is just humidity and precip
+
+glm2<- lm(log_beta~mean_H2M + sum_precip, data= merge.dat, na.action = na.fail)
+summary(glm2)
+AIC(glm1,glm2) #glm2 is better
+
+library(sjPlot)
+
+plot_model(glm2, type="est")
+
+plot_model(glm2, type="pred", grid=T) #transmission decreases with increasing humidity and increases with increasing precip
+
+
+
+#############
+#climate lags below
+
+
+#beta lag - no lag really for the transmission rate
+
+print(ccf(merge.dat$sum_precip, merge.dat$beta))
 # 95% CI at 0.09
 
 
 #save as data
-dat.lag <- cbind.data.frame(lag = print(ccf(merge.dat$sum_precip, merge.dat$cases_by_hospital))$lag, acf=print(ccf(merge.dat$sum_precip, merge.dat$cases_by_hospital))$acf)
+dat.lag <- cbind.data.frame(lag = print(ccf(merge.dat$sum_precip, merge.dat$beta))$lag, acf=print(ccf(merge.dat$sum_precip, merge.dat$beta))$acf)
+dat.lag$variable <- "sum_precip"
+
+#what is the optimal lag?
+dat.lag$lag[dat.lag$acf==max(dat.lag$acf)]
+# 20 is maximized cross correlation: 
+# so precip follows beta 20 epiweeks - no sig
+
+# and what about temp ?
+dat2 = cbind.data.frame(lag = print(ccf(merge.dat$meanTemp, merge.dat$beta))$lag, acf=print(ccf(merge.dat$meanTemp, merge.dat$beta))$acf)
+dat2$variable <- "meanTemp"
+dat2$lag[dat2$acf==max(dat2$acf)]
+# -22 and -21 is maximized cross correlation
+# cases follow temp by 22 weeks
+# 95% CI at 0.09
+
+
+#and humidity
+dat3 = cbind.data.frame(lag = print(ccf(merge.dat$mean_H2M, merge.dat$beta))$lag, acf=print(ccf(merge.dat$mean_H2M, merge.dat$beta))$acf)
+dat3$variable <- "mean_H2M"
+dat3$lag[dat3$acf==max(dat3$acf)]
+# 24 only
+# transmission precedes  H2M by 24 week
+# 95% CI at 0.09
+
+
+#save together
+dat.lag <- rbind(dat.lag, dat2, dat3)
+
+#write.csv(dat.lag, file=paste0(homewd, "/data/lag_output.csv"), row.names = F)
+
+
+#and plot acf
+#include the optimal lag on plot
+max.lag <- dlply(dat.lag, .(variable))
+get.lag <- function(df){
+  lag = min(abs(df$lag[df$acf==max(df$acf)]))
+  df.out = cbind.data.frame(variable=unique(df$variable), lag=lag)
+  return(df.out)
+}
+max.lag <- data.table::rbindlist(lapply(max.lag, get.lag))
+
+
+
+max.lag$label <- max.lag$variable
+max.lag$label[max.lag$label=="sum_precip"]<-  "sum precipitation (mm)"
+max.lag$label[max.lag$label=="meanTemp"] <- "mean temp (*C)"
+max.lag$label[max.lag$label=="mean_H2M"] <- "mean humidity (H2M)"
+
+
+
+
+
+
+
+
+#cases lag
+print(ccf(merge.dat$sum_precip, merge.dat$cases))
+# 95% CI at 0.09
+
+
+#save as data
+dat.lag <- cbind.data.frame(lag = print(ccf(merge.dat$sum_precip, merge.dat$cases))$lag, acf=print(ccf(merge.dat$sum_precip, merge.dat$cases))$acf)
 dat.lag$variable <- "sum_precip"
 
 #what is the optimal lag?
@@ -137,7 +388,7 @@ dat.lag$lag[dat.lag$acf==max(dat.lag$acf)]
 # so precip precedes cases by 3 epiweeks
 
 # and what about temp ?
-dat2 = cbind.data.frame(lag = print(ccf(merge.dat$meanTemp, merge.dat$cases_by_hospital))$lag, acf=print(ccf(merge.dat$meanTemp, merge.dat$cases_by_hospital))$acf)
+dat2 = cbind.data.frame(lag = print(ccf(merge.dat$meanTemp, merge.dat$cases))$lag, acf=print(ccf(merge.dat$meanTemp, merge.dat$cases))$acf)
 dat2$variable <- "meanTemp"
 dat2$lag[dat2$acf==max(dat2$acf)]
 # -6 is maximized cross correlation
@@ -146,7 +397,7 @@ dat2$lag[dat2$acf==max(dat2$acf)]
 
 
 #and humidity
-dat3 = cbind.data.frame(lag = print(ccf(merge.dat$mean_H2M, merge.dat$cases_by_hospital))$lag, acf=print(ccf(merge.dat$mean_H2M, merge.dat$cases_by_hospital))$acf)
+dat3 = cbind.data.frame(lag = print(ccf(merge.dat$mean_H2M, merge.dat$cases))$lag, acf=print(ccf(merge.dat$mean_H2M, merge.dat$cases))$acf)
 dat3$variable <- "mean_H2M"
 dat3$lag[dat3$acf==max(dat3$acf)]
 # 1 only
@@ -157,39 +408,44 @@ dat3$lag[dat3$acf==max(dat3$acf)]
 #save together
 dat.lag <- rbind(dat.lag, dat2, dat3)
 
-write.csv(dat.lag, file=paste0(homewd, "/data/lag_output.csv"), row.names = F)
+#write.csv(dat.lag, file=paste0(homewd, "/data/lag_output.csv"), row.names = F)
 
 
 #and plot acf
 #include the optimal lag on plot
 max.lag <- dlply(dat.lag, .(variable))
 get.lag <- function(df){
-  lag = df$lag[df$acf==max(df$acf)]
+  lag = min(abs(df$lag[df$acf==max(df$acf)]))
   df.out = cbind.data.frame(variable=unique(df$variable), lag=lag)
   return(df.out)
 }
 max.lag <- data.table::rbindlist(lapply(max.lag, get.lag))
-max.lag$label = paste0("lag=", max.lag$lag, " epiwks")
-
-Fig2right <- ggplot(dat.lag) + geom_label(data=max.lag, aes(x=18,y=.4, label=label), label.size = 0) +
-             geom_bar(aes(x=lag, y=acf), stat = "identity") + ylim(c(NA,.45)) +
-             geom_hline(aes(yintercept=0.09), color="blue", linetype=2) +
-             geom_hline(aes(yintercept=-0.09), color="blue", linetype=2) +
-             facet_grid(variable~.) + theme_bw() + theme(legend.position = c(.2,.87), panel.grid = element_blank(),
-                                                         legend.title = element_blank(),
-                                                         axis.title = element_text(size=16),
-                                                         strip.background = element_rect(fill="white"),
-                                                         strip.text = element_text(size=14),
-                                                         legend.text = element_text(size=12),
-                                                         plot.margin = unit(c(.2,.1,.1,1.1), "lines"),
-                                                         axis.text = element_text(size=14))
 
 
-Fig2 <- cowplot::plot_grid(Fig2left, Fig2right, rel_widths = c(1,1.1), nrow = 1, ncol = 2, labels = c("A", "B"), label_size = 22)
 
+max.lag$label <- max.lag$variable
+max.lag$label[max.lag$label=="sum_precip"]<-  "sum precipitation (mm)"
+max.lag$label[max.lag$label=="meanTemp"] <- "mean temp (*C)"
+max.lag$label[max.lag$label=="mean_H2M"] <- "mean humidity (H2M)"
 
-ggsave(file = paste0(homewd, "/figures/Fig2.png"),
-       plot = Fig2,
+max.lag$x=47
+max.lag$y=90
+max.lag$y[max.lag$variable=="meanTemp"] <- 12
+max.lag$y[max.lag$variable=="sum_precip"] <- 350
+max.lag$text = paste0("optimal lag=", max.lag$lag, " wks")
+max.lag$text[max.lag$variable=="mean_H2M"] <- "optimal lag concurrent"
+
+newFig2<- ggplot(data=clim.melt) + geom_line(aes(x=week, y=value, color=year)) + 
+  geom_label(data=max.lag, aes(x=x,y=y, label=text), label.size = 0) +
+  facet_grid(label~., scales = "free_y") + 
+  theme_bw() + theme(legend.position = "right", panel.grid = element_blank(),
+                     legend.title = element_blank(), axis.title = element_blank(), strip.text = element_text(size=14),
+                     strip.background = element_rect(fill="white"),legend.text = element_text(size=12),
+                     plot.margin = unit(c(.2,.1,1.3,1.1), "lines"), axis.text = element_text(size=14))
+#and loo
+
+ggsave(file = paste0(homewd, "/figures/Fig2-new.png"),
+       plot = newFig2,
        units="mm",  
        width=90, 
        height=80, 
