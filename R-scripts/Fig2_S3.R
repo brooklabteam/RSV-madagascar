@@ -199,7 +199,7 @@ FigS3A <- ggplot(data=precip.df) + facet_grid(~group_col,scales = "free_x") +
           geom_ribbon(aes(x=x, ymin=conf.low, ymax=conf.high), alpha=.3) + theme_bw() +
           theme(panel.grid = element_blank(), strip.text = element_text(size=18),
           strip.background = element_rect(fill="white"),
-          axis.title.y = element_text(size = 18),
+          axis.title.y = element_text(size = 16),
           axis.title.x = element_blank(), axis.text = element_text(size = 13),
           plot.margin = unit(c(.1,.1,.1,.9), "cm")) 
 
@@ -220,7 +220,7 @@ FigS3B <- ggplot(data=humid.df) + facet_grid(~group_col,scales = "free_x") +
   geom_ribbon(aes(x=x, ymin=conf.low, ymax=conf.high), alpha=.3) + theme_bw() +
   theme(panel.grid = element_blank(), strip.text = element_text(size=18),
         strip.background = element_rect(fill="white"),
-        axis.title.y = element_text(size = 18),
+        axis.title.y = element_text(size = 16),
         axis.title.x = element_blank(), axis.text = element_text(size = 13),
         plot.margin = unit(c(.1,.1,.1,.9), "cm")) 
 
@@ -243,29 +243,47 @@ FigS3C <- ggplot(data=temp.df) + facet_grid(~group_col,scales = "free_x") +
   geom_ribbon(aes(x=x, ymin=conf.low, ymax=conf.high), alpha=.3) + theme_bw() +
   theme(panel.grid = element_blank(), strip.text = element_text(size=18),
         strip.background = element_rect(fill="white"),
-        axis.title.y = element_text(size = 18),
+        axis.title.y = element_text(size = 16),
         axis.title.x = element_blank(), axis.text = element_text(size = 13),
         plot.margin = unit(c(.1,.1,.1,.9), "cm")) 
 
+#what about cases??? decreasing - 
+#contradictory effects of increasing humidity (driving cases down) and increasing precip (driving cases up)
+gam4 <- gam(cases~year +  s(week, k=7, bs="cc"), data=merge.dat)
+summary(gam4) # neg trend
+case.df <- get_model_data(gam4, type="pred", grid=T)
+
+case.df$x[case.df$group_col=="week"] <- case.df$x[case.df$group_col=="week"]*52
+case.df$group_col <- as.character(case.df$group_col)
+case.df$group_col[case.df$group_col=="week"] <- "week of year"
+case.df$group_col <- factor(case.df$group_col, levels=c("year", "week of year"))
+
+
+FigS3D <- ggplot(data=case.df) + facet_grid(~group_col,scales = "free_x") +
+  geom_line(aes(x=x, y=predicted), size=1) + 
+  ylab("predicted cases")+
+  geom_ribbon(aes(x=x, ymin=conf.low, ymax=conf.high), alpha=.3) + theme_bw() +
+  theme(panel.grid = element_blank(), strip.text = element_text(size=18),
+        strip.background = element_rect(fill="white"),
+        axis.title.y = element_text(size = 16),
+        axis.title.x = element_blank(), axis.text = element_text(size = 13),
+        plot.margin = unit(c(.1,.1,.1,.9), "cm")) 
+
+
 #and compile
-FigS3 <- cowplot::plot_grid(FigS3A, FigS3B, FigS3C, ncol=1, nrow=3, labels=c("A", "B", "C"), label_size = 22, align = "hv")
+FigS3 <- cowplot::plot_grid(FigS3A, FigS3B, FigS3C, FigS3D, ncol=1, nrow=4, labels=c("A", "B", "C", "D"), label_size = 22, align = "hv")
 
 
 ggsave(file = paste0(homewd, "/figures/FigS3.png"),
        plot = FigS3,
        units="mm",  
        width=70, 
-       height=90, 
+       height=115, 
        scale=3, 
        dpi=300)
 
 
 
-#what about cases??? decreasing - 
-#contradictory effects of increasing humidity (driving cases down) and increasing precip (driving cases up)
-gam4 <- gam(cases~year +  s(week, k=7, bs="cc"), data=merge.dat)
-summary(gam4) # neg trend
-plot_model(gam4, type="pred", grid=T)
 
 #plot each by year
 clim.dat <- dplyr::select(merge.dat, -(births), -(pop), -(week), -(beta_low), -(beta_high))
