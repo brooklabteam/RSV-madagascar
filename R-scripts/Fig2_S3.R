@@ -188,15 +188,77 @@ gam1 <- gam(sum_precip~year +  s(week, k=7, bs="cc"), data=merge.dat)
 summary(gam1) # slight pos trend
 plot_model(gam1, type="pred", grid=T)
 
+precip.df <- get_model_data(gam1, type="pred", grid=T)
+precip.df$x[precip.df$group_col=="week"] <- precip.df$x[precip.df$group_col=="week"]*52
+precip.df$group_col <- as.character(precip.df$group_col)
+precip.df$group_col[precip.df$group_col=="week"] <- "week of year"
+precip.df$group_col <- factor(precip.df$group_col, levels=c("year", "week of year"))
+
+FigS3A <- ggplot(data=precip.df) + facet_grid(~group_col,scales = "free_x") +
+          geom_line(aes(x=x, y=predicted), size=1) + ylab("predicted sum precipitation (mm)") +
+          geom_ribbon(aes(x=x, ymin=conf.low, ymax=conf.high), alpha=.3) + theme_bw() +
+          theme(panel.grid = element_blank(), strip.text = element_text(size=18),
+          strip.background = element_rect(fill="white"),
+          axis.title.y = element_text(size = 18),
+          axis.title.x = element_blank(), axis.text = element_text(size = 13),
+          plot.margin = unit(c(.1,.1,.1,.9), "cm")) 
+
+
 #humidity - also increasing
 gam2 <- gam(mean_H2M~year +  s(week, k=7, bs="cc"), data=merge.dat)
 summary(gam2) # slight pos tred
 plot_model(gam2, type="pred", grid=T)
 
+humid.df <- get_model_data(gam2, type="pred", grid=T)
+humid.df$x[humid.df$group_col=="week"] <- humid.df$x[humid.df$group_col=="week"]*52
+humid.df$group_col <- as.character(humid.df$group_col)
+humid.df$group_col[humid.df$group_col=="week"] <- "week of year"
+humid.df$group_col <- factor(humid.df$group_col, levels=c("year", "week of year"))
+
+FigS3B <- ggplot(data=humid.df) + facet_grid(~group_col,scales = "free_x") +
+  geom_line(aes(x=x, y=predicted), size=1) + ylab("predicted mean humidity (%)") +
+  geom_ribbon(aes(x=x, ymin=conf.low, ymax=conf.high), alpha=.3) + theme_bw() +
+  theme(panel.grid = element_blank(), strip.text = element_text(size=18),
+        strip.background = element_rect(fill="white"),
+        axis.title.y = element_text(size = 18),
+        axis.title.x = element_blank(), axis.text = element_text(size = 13),
+        plot.margin = unit(c(.1,.1,.1,.9), "cm")) 
+
+
 #temp - increasing
 gam3 <- gam(meanTemp~year +  s(week, k=7, bs="cc"), data=merge.dat)
 summary(gam3) # pos trend
 plot_model(gam3, type="pred", grid=T)
+
+
+temp.df <- get_model_data(gam3, type="pred", grid=T)
+temp.df$x[temp.df$group_col=="week"] <- temp.df$x[temp.df$group_col=="week"]*52
+temp.df$group_col <- as.character(temp.df$group_col)
+temp.df$group_col[temp.df$group_col=="week"] <- "week of year"
+temp.df$group_col <- factor(temp.df$group_col, levels=c("year", "week of year"))
+
+FigS3C <- ggplot(data=temp.df) + facet_grid(~group_col,scales = "free_x") +
+  geom_line(aes(x=x, y=predicted), size=1) + 
+  ylab(bquote('predicted mean temp ( '^0~'C)'))+
+  geom_ribbon(aes(x=x, ymin=conf.low, ymax=conf.high), alpha=.3) + theme_bw() +
+  theme(panel.grid = element_blank(), strip.text = element_text(size=18),
+        strip.background = element_rect(fill="white"),
+        axis.title.y = element_text(size = 18),
+        axis.title.x = element_blank(), axis.text = element_text(size = 13),
+        plot.margin = unit(c(.1,.1,.1,.9), "cm")) 
+
+#and compile
+FigS3 <- cowplot::plot_grid(FigS3A, FigS3B, FigS3C, ncol=1, nrow=3, labels=c("A", "B", "C"), label_size = 22, align = "hv")
+
+
+ggsave(file = paste0(homewd, "/figures/FigS3.png"),
+       plot = FigS3,
+       units="mm",  
+       width=70, 
+       height=90, 
+       scale=3, 
+       dpi=300)
+
 
 
 #what about cases??? decreasing - 
@@ -262,39 +324,28 @@ ggsave(file = paste0(homewd, "/figures/Fig2.png"),
        dpi=300)
 
 
+# Now, test whether lagged climate variables offer a better predictor of 
+# beta
 
-
-
-
-#and look 
-
-newFig2<- ggplot(data=subset(clim.melt, label!="beta")) + geom_line(aes(x=week_num, y=value, color=year)) + 
-      facet_grid(label~., scales = "free_y") + 
-      theme_bw() + theme(legend.position = "right", panel.grid = element_blank(),
-      legend.title = element_blank(), axis.title = element_blank(), strip.text = element_text(size=14),
-      strip.background = element_rect(fill="white"),legend.text = element_text(size=12),
-      plot.margin = unit(c(.2,.1,1.3,1.1), "lines"), axis.text = element_text(size=14))
-#and look for the cross correlations
-#plot and get the printout
-
-#beta lag - no lag really for the transmission rate -see below
-#so instead we used the exact present timestep, consistent with Rachel
-#regression of humidity and precip and temp on beta
 
 head(merge.dat)
 merge.dat$log_beta <- log(merge.dat$beta)
 
+#save this and plot it in Figure 3
+write.csv(merge.dat, file = paste0(homewd, "/data/lagged_climate_transmission_RSV.csv"), row.names = F)
+
 glm1 <- lm(log_beta~mean_H2M + sum_precip + meanTemp + year, data= merge.dat)
-summary(glm1)
+summary(glm1) #all three climate variables are significant
 #tried year as a random effect and got nowhere.
 
 #check best fit model
 library(MuMIn)
 glm1 <- lm(log_beta~mean_H2M + sum_precip + meanTemp + year, data= merge.dat, na.action = na.fail)
 summary(glm1)
-dredge(global.model = glm1) #best fit is just humidity and precip
+dredge(global.model = glm1) 
+#best fit is humidity, temp, and precip (no year)
 
-glm2<- lm(log_beta~mean_H2M + sum_precip, data= merge.dat, na.action = na.fail)
+glm2<- lm(log_beta~mean_H2M + sum_precip+ meanTemp, data= merge.dat, na.action = na.fail)
 summary(glm2)
 AIC(glm1,glm2) #glm2 is better
 
@@ -304,49 +355,50 @@ plot_model(glm2, type="est")
 
 plot_model(glm2, type="pred", grid=T) #transmission decreases with increasing humidity and increases with increasing precip
 
-
+# Figure 3 will be model comparison + some variation on above
 
 #############
-#climate lags below
+#Test whether climate lags are appropriate predictors
 
 
 #beta lag - no lag really for the transmission rate
 
-print(ccf(merge.dat$sum_precip, merge.dat$beta))
+print(ccf(merge.dat$sum_precip, merge.dat$log_beta))
 # 95% CI at 0.09
 
 
 #save as data
-dat.lag <- cbind.data.frame(lag = print(ccf(merge.dat$sum_precip, merge.dat$beta))$lag, acf=print(ccf(merge.dat$sum_precip, merge.dat$beta))$acf)
+dat.lag <- cbind.data.frame(lag = print(ccf(merge.dat$sum_precip, merge.dat$log_beta))$lag, acf=print(ccf(merge.dat$sum_precip, merge.dat$log_beta))$acf)
 dat.lag$variable <- "sum_precip"
 
 #what is the optimal lag?
 dat.lag$lag[dat.lag$acf==max(dat.lag$acf)]
 # 20 is maximized cross correlation: 
-# so precip follows beta 20 epiweeks - no sig
+# so precip follows beta 20 epiweeks - not a sig lag
 
 # and what about temp ?
-dat2 = cbind.data.frame(lag = print(ccf(merge.dat$meanTemp, merge.dat$beta))$lag, acf=print(ccf(merge.dat$meanTemp, merge.dat$beta))$acf)
+dat2 = cbind.data.frame(lag = print(ccf(merge.dat$meanTemp, merge.dat$log_beta))$lag, acf=print(ccf(merge.dat$meanTemp, merge.dat$log_beta))$acf)
 dat2$variable <- "meanTemp"
 dat2$lag[dat2$acf==max(dat2$acf)]
-# -22 and -21 is maximized cross correlation
-# cases follow temp by 22 weeks
+#  -21 is maximized cross correlation
+# cases follow temp by 21 weeks - pretty feeble signature
 # 95% CI at 0.09
 
 
 #and humidity
-dat3 = cbind.data.frame(lag = print(ccf(merge.dat$mean_H2M, merge.dat$beta))$lag, acf=print(ccf(merge.dat$mean_H2M, merge.dat$beta))$acf)
+dat3 = cbind.data.frame(lag = print(ccf(merge.dat$mean_H2M, merge.dat$log_beta))$lag, acf=print(ccf(merge.dat$mean_H2M, merge.dat$log_beta))$acf)
 dat3$variable <- "mean_H2M"
 dat3$lag[dat3$acf==max(dat3$acf)]
 # 24 only
-# transmission precedes  H2M by 24 week
+# transmission precedes % humidity by 24 weeks - also no sig signature
 # 95% CI at 0.09
+
 
 
 #save together
 dat.lag <- rbind(dat.lag, dat2, dat3)
 
-#write.csv(dat.lag, file=paste0(homewd, "/data/lag_output.csv"), row.names = F)
+write.csv(dat.lag, file=paste0(homewd, "/data/lag_output.csv"), row.names = F)
 
 
 #and plot acf
@@ -367,135 +419,22 @@ max.lag$label[max.lag$label=="meanTemp"] <- "mean temp (*C)"
 max.lag$label[max.lag$label=="mean_H2M"] <- "mean humidity (H2M)"
 
 
+#We decided not to use these because they aren't really significant
+LagPlot<- ggplot(dat.lag) + geom_label(data=max.lag, aes(x=18,y=.4, label=label), label.size = 0) +
+  geom_bar(aes(x=lag, y=acf), stat = "identity") + ylim(c(NA,.45)) +
+  geom_hline(aes(yintercept=0.09), color="blue", linetype=2) +
+  geom_hline(aes(yintercept=-0.09), color="blue", linetype=2) +
+  facet_grid(variable~.) + theme_bw() + theme(legend.position = c(.2,.87), panel.grid = element_blank(),
+                                              legend.title = element_blank(),
+                                              axis.title = element_text(size=16),
+                                              strip.background = element_rect(fill="white"),
+                                              strip.text = element_text(size=14),
+                                              legend.text = element_text(size=12),
+                                              plot.margin = unit(c(.2,.1,.1,1.1), "lines"),
+                                              axis.text = element_text(size=14))
 
 
 
 
 
 
-#cases lag
-print(ccf(merge.dat$sum_precip, merge.dat$cases))
-# 95% CI at 0.09
-
-
-#save as data
-dat.lag <- cbind.data.frame(lag = print(ccf(merge.dat$sum_precip, merge.dat$cases))$lag, acf=print(ccf(merge.dat$sum_precip, merge.dat$cases))$acf)
-dat.lag$variable <- "sum_precip"
-
-#what is the optimal lag?
-dat.lag$lag[dat.lag$acf==max(dat.lag$acf)]
-# -3 is maximized cross correlation: 
-# so precip precedes cases by 3 epiweeks
-
-# and what about temp ?
-dat2 = cbind.data.frame(lag = print(ccf(merge.dat$meanTemp, merge.dat$cases))$lag, acf=print(ccf(merge.dat$meanTemp, merge.dat$cases))$acf)
-dat2$variable <- "meanTemp"
-dat2$lag[dat2$acf==max(dat2$acf)]
-# -6 is maximized cross correlation
-# cases follow temp by 6 weeks
-# 95% CI at 0.09
-
-
-#and humidity
-dat3 = cbind.data.frame(lag = print(ccf(merge.dat$mean_H2M, merge.dat$cases))$lag, acf=print(ccf(merge.dat$mean_H2M, merge.dat$cases))$acf)
-dat3$variable <- "mean_H2M"
-dat3$lag[dat3$acf==max(dat3$acf)]
-# 1 only
-# cases follow mean H2M by 1 week
-# 95% CI at 0.09
-
-
-#save together
-dat.lag <- rbind(dat.lag, dat2, dat3)
-
-#write.csv(dat.lag, file=paste0(homewd, "/data/lag_output.csv"), row.names = F)
-
-
-#and plot acf
-#include the optimal lag on plot
-max.lag <- dlply(dat.lag, .(variable))
-get.lag <- function(df){
-  lag = min(abs(df$lag[df$acf==max(df$acf)]))
-  df.out = cbind.data.frame(variable=unique(df$variable), lag=lag)
-  return(df.out)
-}
-max.lag <- data.table::rbindlist(lapply(max.lag, get.lag))
-
-
-
-max.lag$label <- max.lag$variable
-max.lag$label[max.lag$label=="sum_precip"]<-  "sum precipitation (mm)"
-max.lag$label[max.lag$label=="meanTemp"] <- "mean temp (*C)"
-max.lag$label[max.lag$label=="mean_H2M"] <- "mean humidity (H2M)"
-
-max.lag$x=47
-max.lag$y=90
-max.lag$y[max.lag$variable=="meanTemp"] <- 12
-max.lag$y[max.lag$variable=="sum_precip"] <- 350
-max.lag$text = paste0("optimal lag=", max.lag$lag, " wks")
-max.lag$text[max.lag$variable=="mean_H2M"] <- "optimal lag concurrent"
-
-newFig2<- ggplot(data=clim.melt) + geom_line(aes(x=week, y=value, color=year)) + 
-  geom_label(data=max.lag, aes(x=x,y=y, label=text), label.size = 0) +
-  facet_grid(label~., scales = "free_y") + 
-  theme_bw() + theme(legend.position = "right", panel.grid = element_blank(),
-                     legend.title = element_blank(), axis.title = element_blank(), strip.text = element_text(size=14),
-                     strip.background = element_rect(fill="white"),legend.text = element_text(size=12),
-                     plot.margin = unit(c(.2,.1,1.3,1.1), "lines"), axis.text = element_text(size=14))
-#and loo
-
-ggsave(file = paste0(homewd, "/figures/Fig2-new.png"),
-       plot = newFig2,
-       units="mm",  
-       width=90, 
-       height=80, 
-       scale=3, 
-       dpi=300)
-
-
-head(merge.dat)
-
-#make a new dataset with the lagged versions of these climate variables
-# we can't start cases at timestep 1 because they are only predicted by all three variables starting
-# at timestep 7 (because the lag for temp is 6).
-
-#temp first
-merge.shift <- merge.dat[7: length(merge.dat$epiweek),]
-merge.shift$meantempLag <- merge.dat$meanTemp[1:(length(merge.dat$meanTemp)-6)]
-
-#humid stays as is
-
-#lag precip by 3
-merge.shift$precip_lag <- merge.dat$sum_precip[4:(length(merge.dat$sum_precip)-3)]
-
-
-head(merge.shift)
-
-#now, make a linear model predicting cases
-merge.shift$n_hospitals <- 1
-merge.shift$n_hospitals[merge.shift$epiweek>="2020-01-01" & merge.shift$epiweek< "2022-08-01"] <- 2
-merge.shift$n_hospitals[merge.shift$epiweek>= "2022-08-01"] <- 3
-
-#save new lagged data
-write.csv(merge.shift, file = paste0(homewd, "/data/lagged-dat.csv"), row.names = F)
-
-#first try no predictor by year
-
-m1 <- glm(cases~n_hospitals + mean_H2M + meantempLag + precip_lag, data = merge.shift, family = "poisson")
-summary(m1)
-
-library(sjPlot)
-
-#then try with year as a random effect
-merge.shift$year <- as.factor(merge.shift$year)
-library(lme4)
-
-m2 <- glmer(cases~n_hospitals + mean_H2M + meantempLag + precip_lag + (1|year),data = merge.shift, family = "poisson")
-summary(m2)
-
-AIC(m1, m2) #m2 is better
-
-#ideally, you would add package sjPlot
-#plot model output
-
-plot_model(m2)

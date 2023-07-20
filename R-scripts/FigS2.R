@@ -26,7 +26,7 @@ pop.vec <- c(unlist(pop.vec[which(names(pop.vec)=="2011"):which(names(pop.vec)==
 #load pop.vector from the region
 pop.vec <- read.csv(file=paste0(homewd, "/data/catchment_pop_by_year.csv"), header = T, stringsAsFactors = F)
 #load pop.vector from the region
-pop.vec <- pop.vec$tot_pop[2:length(pop.vec$year)]
+pop.vec <- pop.vec$tot_pop
 names(pop.vec) <- 2011:2021
 
 
@@ -424,11 +424,11 @@ pEFG <- cowplot::plot_grid(out.plot[[5]], out.plot[[6]], out.plot[[7]],  nrow=3,
 
 
 #and all together
-pS1top <- cowplot::plot_grid(pAB, pCD, nrow = 2, ncol=1,align = "vh")
-FigS1 <- cowplot::plot_grid(pS1top, pEFG, nrow=2, ncol=1, align = "vh", rel_heights = c(1,1.3))
+pS2top <- cowplot::plot_grid(pAB, pCD, nrow = 2, ncol=1,align = "vh")
+FigS2 <- cowplot::plot_grid(pS2top, pEFG, nrow=2, ncol=1, align = "vh", rel_heights = c(1,1.3))
 
-ggsave(file = paste0(homewd, "/figures/FigS1.png"),
-       plot = FigS1,
+ggsave(file = paste0(homewd, "/figures/FigS2.png"),
+       plot = FigS2,
        units="mm",  
        width=100, 
        height=110, 

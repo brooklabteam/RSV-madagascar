@@ -78,9 +78,31 @@ percent.hosp$prevalence = percent.hosp$cases/percent.hosp$tested
 percent.hosp <- ddply(calc.hosp, .(hospital), summarise, cases=sum(cases), tested=sum(tested))
 #only one data point from 2010 with no hospital identifier
 
-#most of these cases are from CENHOSOA but a few are not
-ggplot(data=calc.hosp) + geom_line(aes(x=year, y=tested, color=hospital))
-ggplot(data=calc.hosp) + geom_line(aes(x=year, y=cases, color=hospital))
+calc.hosp = subset(calc.hosp, year>2010 & year<2022)
+#most of these cases are from CENHOSOA but a few are not - this is figure S1
+FigS1 <- ggplot(data=calc.hosp) + 
+          geom_line(aes(x=year, y=tested, color=hospital), size=1) +
+          geom_line(aes(x=year, y=cases, color=hospital), linetype=2, size=1) + 
+          scale_x_continuous(breaks=seq(2011,2021, by=2)) +
+          theme_bw() + ylab("febrile patients") +
+          theme(panel.grid = element_blank(),
+          axis.title.y = element_text(size=18),
+          axis.title.x = element_blank(),
+          axis.text = element_text(size=14),
+          plot.margin = unit(c(.1,.1,.5,1), "cm"),
+          legend.position = c(.25,.9),
+          legend.direction = "horizontal") +
+          guides(color=guide_legend(ncol=2))
+
+
+ggsave(file = paste0(homewd, "/figures/FigS1.png"),
+       plot = FigS1,
+       units="mm",  
+       width=65, 
+       height=50, 
+       scale=3, 
+       dpi=300)
+
 
 #catchment by hospital
 #: BHK(28574), CSMI TSL(43222), MJR(8000), CENHOSOA(89000), CHUMET(43222)
