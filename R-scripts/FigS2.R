@@ -5,6 +5,7 @@ library(dplyr)
 library(ggplot2)
 library(lubridate)
 library(tsiR)
+library(reshape2)
 
 
 homewd="/Users/carabrook/Developer/RSV-madagascar"
@@ -12,16 +13,10 @@ homewd="/Users/carabrook/Developer/RSV-madagascar"
 #homewd="path_to_Tsiry_directory"
 setwd(homewd)
 
-
-#first, population data for madagascar
-pop.dat <- read.csv(file=paste0(homewd, "/data/WorldBankMada.csv"), header = T, stringsAsFactors = F)
-head(pop.dat)
-pop.vec <- pop.dat[2,5:ncol(pop.dat)]
-names(pop.vec) <- seq(2009,2022,1) #assume this is census at the end of each year,
-
-
-#so one timestep before gives you the population at the beginning of the year
-pop.vec <- c(unlist(pop.vec[which(names(pop.vec)=="2011"):which(names(pop.vec)=="2021")]))
+# 
+# #first, birth data for madagascar
+ birth.dat <- read.csv(file=paste0(homewd, "/data/WorldBankMada.csv"), header = T, stringsAsFactors = F)
+ head(birth.dat)
 
 #load pop.vector from the region
 pop.vec <- read.csv(file=paste0(homewd, "/data/catchment_pop_by_year.csv"), header = T, stringsAsFactors = F)
@@ -30,14 +25,12 @@ pop.vec <- pop.vec$tot_pop
 names(pop.vec) <- 2011:2021
 
 
-# this is at the national level - now scale down to just 1 hospital catchment in Antananarivo,
-# assuming ~1% of the country pop and constant through the time series
-#pop.vec <- pop.vec*.001
-
-birth.vec <- pop.dat[1,5:ncol(pop.dat)]
+#select only the birth row from the national data
+birth.vec <- birth.dat[1,5:ncol(birth.dat)]
 names(birth.vec) <- seq(2009,2022,1) #assume this is census at the end of each year,
+
+#here, select the range of dates for your data
 birth.vec <- birth.vec[which(names(birth.vec)=="2011"):which(names(birth.vec)=="2021")]
-#birth.vec['2020'] <- birth.vec['2019'] #assume this is the same as prior year
 
 
 #now scale up by population size to get total births per year
@@ -99,10 +92,13 @@ sub.tsir.dat = subset(sub.tsir.dat, year>2010 & year<2022)
 
 sub.tsir.dat <- arrange(sub.tsir.dat, time)
 
-#need to fill in the 
+# need to fill in the gaps in the data -
+# TSIR breaks when there are 'extinctions' in the dataset
+# So we make an assumption of 'low' cases only
+# it does not change the results
 sub.tsir.dat$cases[sub.tsir.dat$cases==0] <- 1
 
-#there are gaps in the time series
+# This fills in the gaps in the time series
 ggplot(sub.tsir.dat) + geom_point(aes(x=week, y=cases, color=year, group=year)) + 
   geom_line(aes(x=week, y=cases, color=year, group=year)) + ylab("cases in 2 hospital catchment") +
   facet_wrap(~year)
@@ -134,10 +130,7 @@ get.tsir.data <- function(df, births, pop){
 
 tsir.dat <- data.table::rbindlist(lapply(tsir.year, get.tsir.data, births=birth.vec, pop=pop.vec))
 
-#tsir.dat = tsiRdata(time=sub.tsir.dat.new$time, cases = sub.tsir.dat.new$cases, births=birth.vec, pop = pop.vec, IP=1)
-
 head(tsir.dat)
-#correct by reporting hospital - no need if all two hospitals (no 2022)
 
 
 ggplot(tsir.dat) + geom_point(aes(x=time, y=cases)) + geom_line(aes(x=time, y=cases)) + ylab("cases")
@@ -155,28 +148,26 @@ ggplot(tsir.dat) + geom_point(aes(x=week, y=cases, color=year, group=year)) +
   geom_line(aes(x=week, y=cases, color=year, group=year)) + ylab("weekly cases") + facet_wrap(~year)
   
 
-#now fit tsir model to data
-# # 
-  fittedpars <- estpars(data=tsir.dat,
+# Now fit tsir model to data usig the tSIR package
+ 
+fittedpars <- estpars(data=tsir.dat,
                             IP=1, alpha=.97, sbar=NULL, xreg = "cumcases",
                             regtype='lm',family='poisson',link='log')
 
-# fittedpars <- estpars(data=tsir.dat, 
-#                       IP=1, alpha=.97, sbar=NULL, xreg = "cumcases",
-#                       regtype='lm',family='gaussian')
+
 
 beta.df <- cbind.data.frame(biweek = rep(1:26, each=2), week=1:52, beta = fittedpars$contact$beta, beta_low = fittedpars$contact$betalow, beta_high = fittedpars$contact$betahigh)
-#beta.df <- beta.df[!duplicated(beta.df),]
+
 
 ggplot(data=beta.df) + geom_point(aes(x=biweek, y=beta)) +geom_line(aes(x=biweek, y=beta)) + geom_linerange(aes(x=biweek, ymin=beta_low, ymax=beta_high))
-ggplot(data=beta.df) + geom_point(aes(x=week, y=beta)) +geom_line(aes(x=week, y=beta)) + geom_linerange(aes(x=week, ymin=beta_low, ymax=beta_high))
-plot(fittedpars$contact$beta, type="b")
+#ggplot(data=beta.df) + geom_point(aes(x=week, y=beta)) +geom_line(aes(x=week, y=beta)) + geom_linerange(aes(x=week, ymin=beta_low, ymax=beta_high))
+#plot(fittedpars$contact$beta, type="b")
 
 simfitted <- simulatetsir(data=tsir.dat,
                            IP = 1,
                            #epidemics = "break",
                            parms=fittedpars,
-                           nsim=100)
+                           nsim=1000)
 
 #and have the TSIR output diagnostics as Fig S1
 #edit plot res function to have labels
