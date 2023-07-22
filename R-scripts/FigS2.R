@@ -133,7 +133,8 @@ tsir.dat <- data.table::rbindlist(lapply(tsir.year, get.tsir.data, births=birth.
 head(tsir.dat)
 
 
-ggplot(tsir.dat) + geom_point(aes(x=time, y=cases)) + geom_line(aes(x=time, y=cases)) + ylab("cases")
+ggplot(dplyr::select(tsir.dat, -(year), -(week))) + geom_point(aes(x=time, y=cases)) + geom_line(aes(x=time, y=cases)) + ylab("cases")
+plotdata(dplyr::select(tsir.dat, -(year), -(week)))
 
 tsir.dat$cases[is.na(tsir.dat$cases)]<- 1
 
@@ -148,12 +149,14 @@ ggplot(tsir.dat) + geom_point(aes(x=week, y=cases, color=year, group=year)) +
   geom_line(aes(x=week, y=cases, color=year, group=year)) + ylab("weekly cases") + facet_wrap(~year)
   
 
-# Now fit tsir model to data usig the tSIR package
+# Now fit tSIR model to data using the tSIR package
+# We follow Baker et al 2019, reconstructing susceptibles using a linear regression
+# of cumulative cases on cumulative births, then estimating beta via a poisson
+# log-link regression in which alpha (the homogeneity parameter) is fixed at 0.97
  
 fittedpars <- estpars(data=tsir.dat,
-                            IP=1, alpha=.97, sbar=NULL, xreg = "cumcases",
-                            regtype='lm',family='poisson',link='log')
-
+                      IP=1, alpha=.97, sbar=NULL, xreg = "cumcases",
+                      regtype='lm',family='poisson',link='log')
 
 
 beta.df <- cbind.data.frame(biweek = rep(1:26, each=2), week=1:52, beta = fittedpars$contact$beta, beta_low = fittedpars$contact$betalow, beta_high = fittedpars$contact$betahigh)
@@ -168,6 +171,7 @@ simfitted <- simulatetsir(data=tsir.dat,
                            #epidemics = "break",
                            parms=fittedpars,
                            nsim=1000)
+
 
 #and have the TSIR output diagnostics as Fig S1
 #edit plot res function to have labels
@@ -408,6 +412,7 @@ plotres <- function (dat, max.plot = 10) {
   }
 }
 out.plot <- plotres(dat=simfitted)
+
 
 pAB <- cowplot::plot_grid(out.plot[[1]], out.plot[[2]], nrow=1, ncol=2, align = "vh", labels = c("A", "B"))
 pCD <- cowplot::plot_grid(out.plot[[3]], out.plot[[4]],  nrow=1, ncol=2, align = "vh", labels = c("C", "D"))

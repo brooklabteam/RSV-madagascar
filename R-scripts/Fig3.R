@@ -109,6 +109,8 @@ comp.df$predictor[comp.df$predictor=="mean_H2M"] <- "mean\nhumidity"
 comp.df$predictor[comp.df$predictor=="meanTemp"] <- "mean\ntemperature"
 comp.df$predictor[comp.df$predictor=="sum_precip"] <- "sum\nprecipitation"
 
+comp.df$predictor <- factor(comp.df$predictor, levels = c("sum\nprecipitation", "mean\nhumidity", "mean\ntemperature", "year"))
+
 # Plot the output of all the models as a heatmap. Here is the main body of the plot panel
 p1a <- ggplot(data=comp.df) + geom_tile(aes(x=predictor, y=model_num, fill=lmg_percent), color="gray", size=1) +
   scale_fill_viridis_c(limits=c(0,1), direction = -1) + scale_y_reverse() + theme_bw() + 
@@ -196,6 +198,9 @@ pred.df$group_col <- as.character(pred.df$group_col)
 pred.df$group_col[pred.df$group_col=="mean_H2M"] <- "atop('mean humidity','(%)')"
 pred.df$group_col[pred.df$group_col=="sum_precip"] <- "atop('sum precipitation','(mm)')"
 pred.df$group_col[pred.df$group_col=="meanTemp"] <- "atop('mean temperature', '('^0~'C)')"
+
+
+pred.df$group_col <- factor(pred.df$group_col, levels=c("atop('sum precipitation','(mm)')", "atop('mean humidity','(%)')", "atop('mean temperature', '('^0~'C)')"))
 
 pred.df$predicted <- exp(pred.df$predicted)
 pred.df$conf.low <- exp(pred.df$conf.low)
