@@ -249,8 +249,8 @@ FigS3C <- ggplot(data=temp.df) + facet_grid(~group_col,scales = "free_x") +
 
 #what about cases??? decreasing - 
 #contradictory effects of increasing humidity (driving cases down) and increasing precip (driving cases up)
-gam4 <- gam(cases~year +  s(week, k=7, bs="cc"), data=merge.dat)
-summary(gam4) # neg trend
+gam4 <- gam(cases~year +  s(week, k=7, bs="cc"), data=merge.dat, family = "poisson")
+summary(gam4) # neg trend not significant
 case.df <- get_model_data(gam4, type="pred", grid=T)
 
 case.df$x[case.df$group_col=="week"] <- case.df$x[case.df$group_col=="week"]*52
@@ -270,7 +270,8 @@ FigS3D <- ggplot(data=case.df) + facet_grid(~group_col,scales = "free_x") +
         plot.margin = unit(c(.1,.1,.1,.9), "cm")) 
 
 
-#and compile
+
+
 FigS3 <- cowplot::plot_grid(FigS3A, FigS3B, FigS3C, FigS3D, ncol=1, nrow=4, labels=c("A", "B", "C", "D"), label_size = 22, align = "hv")
 
 
@@ -329,8 +330,8 @@ Fig2E <-  ggplot(data=subset(clim.melt, label=="mean humidity (H2M)")) +
         #legend.background  = element_rect(color="black"),
         plot.margin = unit(c(.1,.1,1.1,.9), "cm")) 
 
-
-Fig2 <- cowplot::plot_grid(Fig2A, Fig2B, Fig2C, Fig2D, Fig2E, ncol=1, nrow=5, align = "hv", labels = c("A", "B","C",  "D", "E"), label_size = 22)
+#reorder to match the rest of the paper
+Fig2 <- cowplot::plot_grid(Fig2A, Fig2B, Fig2D, Fig2E, Fig2C, ncol=1, nrow=5, align = "hv", labels = c("A", "B","C",  "D", "E"), label_size = 22)
 
 
 ggsave(file = paste0(homewd, "/figures/Fig2.png"),

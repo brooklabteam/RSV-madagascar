@@ -139,7 +139,7 @@ Fig1A <- ggplot(data=dat.sum) + geom_point(aes(x=epiweek, y=prevalence, size=tes
                axis.title.x = element_blank(), axis.text = element_text(size = 14), 
                legend.direction = "horizontal", legend.position = c(.7,.9), 
                legend.background  = element_rect(color="black"), 
-               plot.margin = unit(c(.1,.1,1.1,.1), "cm"))
+               plot.margin = unit(c(.5,.1,.1,.1), "cm"))
 print(Fig1A)
 
 # 
@@ -186,7 +186,7 @@ Fig2A <- ggplot(data=dat.sum) + geom_point(aes(x=week_of_year, y=cases, color=ye
         legend.title = element_blank(),
         legend.direction = "vertical", legend.position = c(.8,.7), 
         #legend.background  = element_rect(color="black"),
-        plot.margin = unit(c(.1,.1,1.1,.9), "cm")) + 
+        plot.margin = unit(c(.2,.1,1.1,.9), "cm")) + 
   guides(color=guide_legend(ncol = 2))
 print(Fig2A)
 
@@ -316,7 +316,7 @@ plot.partial.cont <- function(df, log, var, response_var, alt_var, legend.on){
         theme(panel.grid = element_blank(),
               axis.title = element_text(size=18),
               axis.text = element_text(size=14),
-              plot.margin = unit(c(.1,.1,.5,1), "cm"),
+              plot.margin = unit(c(.5,.1,.1,1), "cm"),
               legend.position = c(.15,.15))+
         ylab(paste0("partial effect on ", response_var)) + xlab(alt_var)
       
@@ -337,7 +337,7 @@ plot.partial.cont <- function(df, log, var, response_var, alt_var, legend.on){
         geom_hline(aes(yintercept=0), linetype=2) + theme_bw() +
         theme(panel.grid = element_blank(), #axis.title.x = element_blank(),
               #axis.text.x = element_text(size=8, angle = 45),
-              plot.margin = unit(c(.1,.1,.5,1), "cm"),
+              plot.margin = unit(c(.5,.1,.1,1), "cm"),
               legend.position = c(.15,.15))+
         ylab(paste0("partial effect on ", response_var)) + xlab(alt_var)
     }}else{
@@ -356,7 +356,7 @@ plot.partial.cont <- function(df, log, var, response_var, alt_var, legend.on){
           theme(panel.grid = element_blank(),
                 axis.title = element_text(size=18),
                 axis.text = element_text(size=14),
-                plot.margin = unit(c(.1,.1,.5,1), "cm"),
+                plot.margin = unit(c(.5,.1,.1,1), "cm"),
                 legend.position = c(.15,.15))+
           ylab(paste0("partial effect on ", response_var)) + xlab(alt_var)
         
@@ -377,7 +377,7 @@ plot.partial.cont <- function(df, log, var, response_var, alt_var, legend.on){
           geom_hline(aes(yintercept=0), linetype=2) + theme_bw() +
           theme(panel.grid = element_blank(), #axis.title.x = element_blank(),
                 #axis.text.x = element_text(size=8, angle = 45),
-                plot.margin = unit(c(.1,.1,.5,1), "cm"), 
+                plot.margin = unit(c(.5,.1,.1,1), "cm"), 
                 legend.position = c(.15,.15))+
           ylab(paste0("partial effect on ", response_var)) + xlab(alt_var)
       }
@@ -418,7 +418,7 @@ plot.partial.year <- function(df, log, var, response_var, alt_var, legend.on){
               axis.title.y = element_text(size=18),
               axis.title.x = element_blank(),
               axis.text = element_text(size=14),
-              plot.margin = unit(c(.1,.1,.5,1), "cm"),
+              plot.margin = unit(c(.2,.1,.5,1), "cm"),
               legend.position = c(.85,.85))+
         ylab(paste0("partial effect on ", response_var)) + xlab(alt_var) 
         
@@ -499,13 +499,30 @@ plot.partial.year <- function(df, log, var, response_var, alt_var, legend.on){
   return(p1)
 }
 
+dat$year <- as.factor(dat$year)
+#now, fit the same gam with year as a random effect
+gam2 <- gam(RSV~s(doy, bs="cc") + 
+              #s(year, bs="tp") +
+              s(year, bs="re") +
+              s(age, bs="tp") +
+              s(hospital, bs="re") +
+              s(sex, bs="re"),
+            data=dat,
+            family = "binomial")
+
+summary(gam2)
+
+AIC(gam1, gam2) #model is better with year as a random effect, so get all the partial effects from this instead
+
+
 
 # Use functions from above script to calculate random effects for each
-age.df <- get_partial_effects_continuous(gamFit = gam1, var="age")
-doy.df <- get_partial_effects_continuous(gamFit = gam1, var="doy")
-year.df <- get_partial_effects_continuous(gamFit=gam1, var = "year")
-sex.df <- get_partial_effects(fit=gam1, var = "sex")
-hosp.df <- get_partial_effects(fit=gam1, var = "hospital")
+age.df <- get_partial_effects_continuous(gamFit = gam2, var="age")
+doy.df <- get_partial_effects_continuous(gamFit = gam2, var="doy")
+#look at deviations by specific year:
+year.df <- get_partial_effects(fit=gam2, var = "year")
+sex.df <- get_partial_effects(fit=gam2, var = "sex")
+hosp.df <- get_partial_effects(fit=gam2, var = "hospital")
 
 
 # Sex
@@ -522,9 +539,8 @@ plot.partial(df=hosp.df, var="hospital", response_var = "RSV positivity")
 Fig1F <- plot.partial(df=hosp.df, var="hospital", response_var = "RSV positivity") 
 
 #Year
-plot.partial.year(df=year.df, log=F, var="year", response_var = "RSV positivity", alt_var ="year", legend.on = TRUE)
-#save as panel B
-Fig1B <- plot.partial.year(df=year.df, log=F, var="year", response_var = "RSV positivity", alt_var ="", legend.on = TRUE) 
+#save as panel C
+Fig1C <- plot.partial(df=year.df, var="year", response_var = "RSV positivity") 
 
 #Age
 plot.partial.cont(df=age.df, log=F, var="age", response_var = "RSV positivity", alt_var ="age", legend.on = TRUE) 
@@ -538,32 +554,40 @@ plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", 
 # Here is the pattern of positivity by day of year - 
 # we see that positive cases are found between day 1 and ~90 and negative the rest of the
 # year.
-#save as panel C
-Fig1C <- plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = F) #seasonal pattern
+#save as panel B
+Fig1B <- plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = F) #seasonal pattern
 
 
+# a few years with significant deviations - consistent with linear trends
 
-
+#dat$year <- as.numeric(as.character(dat$year))
 
 # Now, because a bunch of data were missing age and sex, so
 # go ahead and redo the GAM with only day of year and year as predictors!
-gam2 <- gam(RSV~s(doy, bs="cc") +
+gam3 <- gam(RSV~s(doy, bs="cc") +
                 s(year, bs="re"),
                 data=dat,
                 family = "binomial")
 
-summary(gam2) # N= 4177 all of the data here
-# only doy is significant here
+summary(gam3) # N= 4152 all of the data here
+
+doy.df <- get_partial_effects_continuous(gamFit = gam3, var="doy")
+year.df <- get_partial_effects(fit=gam3, var = "year")
+
+plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = F) #seasonal pattern
+plot.partial(df=year.df, var="year", response_var = "RSV positivity") #replicates 2012 and 2015 sig 
+
+
 
 #But, compare models
-AIC(gam1, gam2)# gam1 is A LOT better, so let's use it
+AIC(gam1, gam2, gam3)# gam2 is A LOT better, so let's use it
 
 
 Fig1AB <- cowplot::plot_grid(Fig1A, Fig1B, nrow = 1, ncol = 2, labels=c("A", "B"), label_size = 22, align = "hv")
 Fig1CD <- cowplot::plot_grid(Fig1C, Fig1D, nrow = 1, ncol = 2, labels=c("C", "D"), label_size = 22, align = "hv")
 Fig1EF <- cowplot::plot_grid(Fig1E, Fig1F, nrow = 1, ncol = 2, labels=c("E", "F"), label_size = 22, align = "hv")
 
-Fig1 <- cowplot::plot_grid(Fig1AB,Fig1CD, Fig1EF, nrow = 3, ncol = 1, label_size = 22)
+Fig1 <- cowplot::plot_grid(Fig1AB,Fig1CD, Fig1EF, nrow = 3, ncol = 1, label_size = 22, rel_heights = c(1,1.1,1.1))
 
 
 

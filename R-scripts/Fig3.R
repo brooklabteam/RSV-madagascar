@@ -14,10 +14,11 @@ homewd="/Users/carabrook/Developer/RSV-madagascar"
 
 dat <- read.csv(file = paste0(homewd, "/data/lagged_climate_transmission_RSV.csv"), header = TRUE, stringsAsFactors = F)
 
+head(dat)
 
 # First, make a global model of all possible predictors of transmission
 # That is here
-global.model <- lm(log_beta~mean_H2M + sum_precip + meanTemp + year, data= dat, na.action = na.fail)
+global.model <- lm(log_beta~mean_H2M + sum_precip + meanTemp, data= dat, na.action = na.fail)
 summary(global.model)
 
 # Now, use dredge to compare and rank all possible model combinations
@@ -87,15 +88,15 @@ calc.one.glm <- function(mod, dat, delta_AICc, model_num){
 specify_decimal <- function(x, k) trimws(format(round(x, k), nsmall=k))
 
 # Subselect the top 10 models to compare
-AIC.max <-sort(out.comp$AICc)[10] # could change if you wanted more or fewer 
+AIC.max <-sort(out.comp$AICc)[8] # could change if you wanted more or fewer 
 out.sum = get.models(out.comp, subset=AICc<=AIC.max) # This function is from MuMIN package - this selects the top 10 models from dredge and formats as a list
 
 # Then calculate the relative contribution of each predictor within each model
 # To the total R-squared within each mode
 # This uses functions I wrote above. make sure '1:10' after 'model_num' and 'delta' terms
-# matches the number of models selected under AIC.max (ends in 10 here but could be 5 or 15, etc)
-rel.comps <- mapply(calc.one.glm, mod=out.sum, model_num=as.list(1:10), 
-                    delta_AICc = as.list(out.comp$delta[1:10]), 
+# matches the number of models selected under AIC.max (ends in 8 here but could be 5 or 15, etc)
+rel.comps <- mapply(calc.one.glm, mod=out.sum, model_num=as.list(1:8), 
+                    delta_AICc = as.list(out.comp$delta[1:8]), 
                     MoreArgs = list(dat=dat), SIMPLIFY = F)
 
 # Bind output into a data table
@@ -109,7 +110,8 @@ comp.df$predictor[comp.df$predictor=="mean_H2M"] <- "mean\nhumidity"
 comp.df$predictor[comp.df$predictor=="meanTemp"] <- "mean\ntemperature"
 comp.df$predictor[comp.df$predictor=="sum_precip"] <- "sum\nprecipitation"
 
-comp.df$predictor <- factor(comp.df$predictor, levels = c("sum\nprecipitation", "mean\nhumidity", "mean\ntemperature", "year"))
+#comp.df$predictor <- factor(comp.df$predictor, levels = c("sum\nprecipitation", "mean\nhumidity", "mean\ntemperature", "year"))
+comp.df$predictor <- factor(comp.df$predictor, levels = c("sum\nprecipitation", "mean\nhumidity", "mean\ntemperature", "random\nintercept"))
 
 # Plot the output of all the models as a heatmap. Here is the main body of the plot panel
 p1a <- ggplot(data=comp.df) + geom_tile(aes(x=predictor, y=model_num, fill=lmg_percent), color="gray", size=1) +
