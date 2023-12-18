@@ -36,7 +36,11 @@ unique(dat$sampling_date)
 dat$DDN[dat$DDN>as.Date("2021-12-31") & !is.na(dat$DDN)] <- as.Date(paste0((as.numeric(sapply(strsplit(as.character(dat$DDN[dat$DDN>as.Date("2021-12-31") & !is.na(dat$DDN)]), split="-"),'[',1))-100), "-", sapply(strsplit(as.character(dat$DDN[dat$DDN>as.Date("2021-12-31")& !is.na(dat$DDN)]), split="-"),'[',2), "-", sapply(strsplit(as.character(dat$DDN[dat$DDN>as.Date("2021-12-31")& !is.na(dat$DDN)]), split="-"),'[',3)))
 
 dat$sampling_date <- as.Date(dat$sampling_date, format = "%m/%d/%y")
+dat$year <- year(dat$sampling_date)
+sort(unique(dat$year))
+subset(dat, year==2022)
 
+dat.ts <- ddply(dat,.(year), summarise, mean_age = mean(age, na.rm=T) )
 head(dat)
 unique(dat$hospital)
 dat$hospital[dat$hospital=="CENHOSOA "] <- "CENHOSOA"
@@ -123,7 +127,7 @@ dat.sum$prevalence <- dat.sum$cases/dat.sum$tested
 
 #calculate year of sampling
 dat.sum$year <- year(dat.sum$epiweek)
-
+sort(unique(dat.sum$year))
 #limit years 
 dat.sum <- subset(dat.sum, year>2010 & year<2022)
 
@@ -195,6 +199,10 @@ print(Fig2A)
 
 # Look at data
 head(dat) 
+#limit years 
+dat$year <- year(dat$sampling_date)
+dat <- subset(dat, year>2010 & year<2022)
+sort(unique(dat$year))
 dat$RSV
 
 
@@ -219,6 +227,9 @@ unique(dat$age)
 dat$age[is.na(dat$age) & !is.na(dat$DDN)] <- (dat$sampling_date[is.na(dat$age) & !is.na(dat$DDN)] - dat$DDN[is.na(dat$age) & !is.na(dat$DDN)])/365
 unique(dat$age)
 subset(dat, age<0) 
+length(dat$age[is.na(dat$age)]) #173 missing
+length(dat$sex[is.na(dat$sex)]) #90 missing
+length(dat$sex[is.na(dat$sex) & is.na(dat$age)]) #73 missing both
 
 dat$year <- as.factor(dat$year)
 
@@ -228,11 +239,12 @@ dat$hospital <- as.factor(dat$hospital)
 dat$year <- as.numeric(as.character(dat$year))
 unique(dat$hospital)
 
+dat$year <- as.factor(dat$year)
 
-# Run GAM with all predictors
+# Run GAM with all predictors - here year as a random effect
 gam1 <- gam(RSV~s(doy, bs="cc") + 
-                s(year, bs="tp") +
-                #s(year, bs="re") +
+                #s(year, bs="tp") +
+                s(year, bs="re") +
                 s(age, bs="tp") +
                 s(hospital, bs="re") +
                 s(sex, bs="re"),
@@ -241,8 +253,8 @@ gam1 <- gam(RSV~s(doy, bs="cc") +
 
 summary(gam1)
 
-#n=3777 because a few are missing sex or age.
-#total N=4152
+#n=3245 because a few are missing sex or age.
+#total N=3435
 
 
 # doy, year, age and hospital have significant effects here
@@ -499,11 +511,11 @@ plot.partial.year <- function(df, log, var, response_var, alt_var, legend.on){
   return(p1)
 }
 
-dat$year <- as.factor(dat$year)
-#now, fit the same gam with year as a random effect
+dat$year <- as.numeric(as.character(dat$year)) 
+#now, fit the same gam with year as a numeric thinplate
 gam2 <- gam(RSV~s(doy, bs="cc") + 
-              #s(year, bs="tp") +
-              s(year, bs="re") +
+              s(year, bs="tp") +
+              #s(year, bs="re") +
               s(age, bs="tp") +
               s(hospital, bs="re") +
               s(sex, bs="re"),
@@ -512,17 +524,17 @@ gam2 <- gam(RSV~s(doy, bs="cc") +
 
 summary(gam2)
 
-AIC(gam1, gam2) #model is better with year as a random effect, so get all the partial effects from this instead
+AIC(gam1, gam2) #model is better with year as a random effect, so get all the partial effects from this 
 
 
 
 # Use functions from above script to calculate random effects for each
-age.df <- get_partial_effects_continuous(gamFit = gam2, var="age")
-doy.df <- get_partial_effects_continuous(gamFit = gam2, var="doy")
+age.df <- get_partial_effects_continuous(gamFit = gam1, var="age")
+doy.df <- get_partial_effects_continuous(gamFit = gam1, var="doy")
 #look at deviations by specific year:
-year.df <- get_partial_effects(fit=gam2, var = "year")
-sex.df <- get_partial_effects(fit=gam2, var = "sex")
-hosp.df <- get_partial_effects(fit=gam2, var = "hospital")
+year.df <- get_partial_effects(fit=gam1, var = "year")
+sex.df <- get_partial_effects(fit=gam1, var = "sex")
+hosp.df <- get_partial_effects(fit=gam1, var = "hospital")
 
 
 # Sex
@@ -546,6 +558,11 @@ Fig1C <- plot.partial(df=year.df, var="year", response_var = "RSV positivity")
 plot.partial.cont(df=age.df, log=F, var="age", response_var = "RSV positivity", alt_var ="age", legend.on = TRUE) 
 # Significant trend with age shows that higher ages have decreased association 
 # with RSV positivity (disease is a disease of kids)
+
+#can see specifically where it becomes neg/pos in the data
+age.df$effects 
+#relationship is only positive in ages 0-21. Much less certainty - and, in fact, no directionality in ages >85
+
 #save as panel D
 Fig1D <- plot.partial.cont(df=age.df, log=F, var="age", response_var = "RSV positivity", alt_var ="age", legend.on = FALSE) 
 
@@ -555,12 +572,12 @@ plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", 
 # we see that positive cases are found between day 1 and ~90 and negative the rest of the
 # year.
 #save as panel B
-Fig1B <- plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = F) #seasonal pattern
+Fig1B <- plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = T) #seasonal pattern
 
 
 # a few years with significant deviations - consistent with linear trends
 
-#dat$year <- as.numeric(as.character(dat$year))
+dat$year <- as.factor(dat$year)
 
 # Now, because a bunch of data were missing age and sex, so
 # go ahead and redo the GAM with only day of year and year as predictors!
@@ -569,18 +586,18 @@ gam3 <- gam(RSV~s(doy, bs="cc") +
                 data=dat,
                 family = "binomial")
 
-summary(gam3) # N= 4152 all of the data here
+summary(gam3) # N= 3435 all of the data here
 
 doy.df <- get_partial_effects_continuous(gamFit = gam3, var="doy")
 year.df <- get_partial_effects(fit=gam3, var = "year")
 
 plot.partial.cont(df=doy.df, log=F, var="doy", response_var = "RSV positivity", alt_var ="day of year", legend.on = F) #seasonal pattern
-plot.partial(df=year.df, var="year", response_var = "RSV positivity") #replicates 2012 and 2015 sig 
+plot.partial(df=year.df, var="year", response_var = "RSV positivity") #replicates 2012 & 2013. 2019 also sig here
 
 
 
 #But, compare models
-AIC(gam1, gam2, gam3)# gam2 is A LOT better, so let's use it
+AIC(gam1, gam2, gam3)# gam1 is A LOT better, so let's use it
 
 
 Fig1AB <- cowplot::plot_grid(Fig1A, Fig1B, nrow = 1, ncol = 2, labels=c("A", "B"), label_size = 22, align = "hv")

@@ -80,7 +80,19 @@ calc.one.glm <- function(mod, dat, delta_AICc, model_num){
   com.df$AICc <- AICc(mod)
   com.df$delta_AICc <- delta_AICc
   com.df$model_num <- model_num
+  
   #and mark which predictors are significant
+  tmp.df = summary(m.out)$coefficients
+  
+  com.df$p_val <- NA
+  
+  for(i in 1:nrow(tmp.df)){
+    com.df$p_val[com.df$predictor == rownames(tmp.df)[i]] <-   tmp.df[i,ncol(tmp.df)]
+  }
+  
+  
+  
+  
   
   #sum.mod <- summary(mod)
   return(com.df)
@@ -112,17 +124,24 @@ comp.df$predictor[comp.df$predictor=="sum_precip"] <- "sum\nprecipitation"
 
 #comp.df$predictor <- factor(comp.df$predictor, levels = c("sum\nprecipitation", "mean\nhumidity", "mean\ntemperature", "year"))
 comp.df$predictor <- factor(comp.df$predictor, levels = c("sum\nprecipitation", "mean\nhumidity", "mean\ntemperature", "random\nintercept"))
+comp.df$is_sig <- 0
+comp.df$is_sig[comp.df$p_val<0.1] <- 1
+comp.df$is_sig <- as.factor(comp.df$is_sig)
 
+sig.colz <- c('1' ="black", '0'="gray")
 # Plot the output of all the models as a heatmap. Here is the main body of the plot panel
-p1a <- ggplot(data=comp.df) + geom_tile(aes(x=predictor, y=model_num, fill=lmg_percent), color="gray", size=1) +
+p1a <- ggplot(data=comp.df) + geom_tile(aes(x=predictor, y=model_num, fill=lmg_percent, color=is_sig),  size=1) +
   scale_fill_viridis_c(limits=c(0,1), direction = -1) + scale_y_reverse() + theme_bw() + 
+  scale_color_manual(values=sig.colz, guide="none") +
   #facet_grid(variable~DENV.serotype) +
   theme(panel.grid = element_blank(), axis.title.x = element_blank(),axis.title.y = element_blank(), #axis.title.y = element_text(size=14), 
         legend.position = "top",
         axis.text.x = element_text(size=10),
         #axis.text.y = element_text(size=12)
         axis.text.y = element_blank(),
-        axis.ticks.y = element_blank()) + labs(fill="Relative contribution\nto standardized R-sq.") 
+        axis.ticks.y = element_blank()) + 
+  labs(fill="Relative contribution\nto standardized R-sq.") 
+  
 
 
 # Here, we rank by delta AIC
@@ -226,7 +245,7 @@ Fig3AB <- cowplot::plot_grid(Fig3A, Fig3B, ncol = 2, nrow = 1, labels=c("A", "B"
 Fig3 <- cowplot::plot_grid(Fig3AB, Fig3C, ncol = 1, nrow = 2, labels = c("", "C"), label_size = 22, rel_heights = c(1,.9)) + theme(plot.background = element_rect(fill="white"))
 
 
-ggsave(file = paste0(homewd, "/figures/Fig3.png"),
+ggsave(file = paste0(homewd, "/figures/Fig4.png"),
        plot = Fig3,
        units="mm",  
        width=110, 

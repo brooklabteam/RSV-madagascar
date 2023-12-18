@@ -334,7 +334,7 @@ Fig2E <-  ggplot(data=subset(clim.melt, label=="mean humidity (H2M)")) +
 Fig2 <- cowplot::plot_grid(Fig2A, Fig2B, Fig2D, Fig2E, Fig2C, ncol=1, nrow=5, align = "hv", labels = c("A", "B","C",  "D", "E"), label_size = 22)
 
 
-ggsave(file = paste0(homewd, "/figures/Fig2.png"),
+ggsave(file = paste0(homewd, "/figures/Fig3.png"),
        plot = Fig2,
        units="mm",  
        width=90, 
