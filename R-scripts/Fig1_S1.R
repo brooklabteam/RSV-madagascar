@@ -254,7 +254,7 @@ gam1 <- gam(RSV~s(doy, bs="cc") +
 summary(gam1)
 
 #n=3245 because a few are missing sex or age.
-#total N=3435
+#total N=3432
 
 
 # doy, year, age and hospital have significant effects here

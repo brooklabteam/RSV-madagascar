@@ -161,6 +161,11 @@ fittedpars <- estpars(data=tsir.dat,
 
 beta.df <- cbind.data.frame(biweek = rep(1:26, each=2), week=1:52, beta = fittedpars$contact$beta, beta_low = fittedpars$contact$betalow, beta_high = fittedpars$contact$betahigh)
 
+beta.df$beta <- signif(beta.df$beta,digits=3)
+beta.df$beta_low <- signif(beta.df$beta_low,digits=3)
+beta.df$beta_high <- signif(beta.df$beta_high,digits=3)
+beta.sum <- ddply(beta.df,.(biweek), summarize, beta=unique(beta), beta_low=unique(beta_low), beta_high=unique(beta_high))
+write.csv(beta.sum, file = paste0(homewd,"/data/TableS3C.csv"), row.names = F)
 
 ggplot(data=beta.df) + geom_point(aes(x=biweek, y=beta)) +geom_line(aes(x=biweek, y=beta)) + geom_linerange(aes(x=biweek, ymin=beta_low, ymax=beta_high))
 #ggplot(data=beta.df) + geom_point(aes(x=week, y=beta)) +geom_line(aes(x=week, y=beta)) + geom_linerange(aes(x=week, ymin=beta_low, ymax=beta_high))
@@ -399,7 +404,7 @@ summary(model_out[[1]]) # Multiple R-squared:  0.9829,	Adjusted R-squared:  0.98
 library(pscl)
 pscl::pR2(model_out[[2]])['McFadden'] #0.6411613 
 
-
+summary(model_out[[2]]) 
 
 #Now simulate
 

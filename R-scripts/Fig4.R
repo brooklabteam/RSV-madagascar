@@ -21,10 +21,16 @@ head(dat)
 global.model <- lm(log_beta~mean_H2M + sum_precip + meanTemp, data= dat, na.action = na.fail)
 summary(global.model)
 
+
+
 # Now, use dredge to compare and rank all possible model combinations
 out.comp <- dredge(global.model = global.model) 
 print(out.comp)
 
+#save as part of Table S4
+tableS4A <- out.comp
+
+write.csv(tableS4A, file = paste0(homewd,"/data/TableS4A.csv"), row.names = F)
 # Top performing model has 3 predictors: humidity, temp, and precip (no year)
 
 # For the first panel of Fig 3, we will compare all model predictors in a heatmap

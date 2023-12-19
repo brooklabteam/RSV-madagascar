@@ -94,14 +94,15 @@ dat$year <- year(dat$sampling_date)
 #plot prevalence by age 
 
 age.dat <- subset(dat, !is.na(age))
+age.dat$age[age.dat$age<=0.5] <- 0
 age.dat$age <- ceiling(age.dat$age)
-age.dat$age[age.dat$age==0] <- 1 
+age.dat$age[age.dat$age==0] <- 0.5
 # 
 # #plot
 # 
 age.count <- ddply(age.dat, .(age), summarise, N=sum(RSV))
 
-all.age <- cbind.data.frame(age=0:89)
+all.age <- cbind.data.frame(age=c(0,0.5,1:89))
 all.age <- merge(all.age, age.count, by="age", all.x = T)
 all.age$N[is.na(all.age$N)] <- 0
 
@@ -116,11 +117,13 @@ model.age.prev <- function(lambda, data, cate){
   #takes in a value for lambda from each age bin, the data itself, and a vector that gives the lower bound of every age bin
   dur=c(diff(cate), 0) #calculates the length of each age bin
   p=as.list(rep(NA,max(data$age))) #make a list to store the prevalence by age predicted from the model
-  for(a in 1:max(data$age)){ #for-loops over all possible ages in our data range
-    dummy1=a>cate  #creates dummy variables to identify which age class this individual falls in
-    dummy2 = a>cate & !c(a>cate[-1], FALSE) #adds a false at the end and takes the inverse to make true only those values above you
-    dummy1=c(a>cate, FALSE)[-1]# and dummy 1 gives you a true for all age bins below you
-    inte=sum(dur*lambda*dummy1) + lambda[dummy2]*(a-cate[dummy2]) 
+  
+  for(a in 1:(length(data$age)-1)){ #for-loops over all possible ages in our data range
+    age = data$age[a+1]
+    dummy1=  age>cate  #creates dummy variables to identify which age class this individual falls in
+    dummy2 =   age>cate & !c(  age>cate[-1], FALSE) #adds a false at the end and takes the inverse to make true only those values above you
+    dummy1=c(  age>cate, FALSE)[-1]# and dummy 1 gives you a true for all age bins below you
+    inte=sum(dur*lambda*dummy1) + lambda[dummy2]*(  age-cate[dummy2]) 
     #integrates over the amount of time in previous age classes + how long you've been in this one as a susceptible
     #to give you the hazard of infection
     p[[a]]=1-exp(-inte) #returns the probability of infection for a given age.
@@ -282,157 +285,187 @@ h5 <- fit.foi(lambda.guess = c(1,.1),
                   lower_age_bin_vector=c(0,1),
                   do.plot = TRUE)
 
+#not as good - needs the two
+h6 <- fit.foi(lambda.guess = c(1,.1),
+              data.in=all.age,
+              hyp = 6,
+              lower_age_bin_vector=c(0,.5),
+              do.plot = TRUE)
+
 #move to three classes
-h6 <- fit.foi(lambda.guess = c(1,.1,.1),
+h7 <- fit.foi(lambda.guess = c(1,.1,.1),
                   data.in=all.age,
-                  hyp = 6,
+                  hyp = 7,
                   lower_age_bin_vector=c(0,1,2),
                   do.plot = TRUE)
 
 
-h7 <- fit.foi(lambda.guess = c(1,.1,.1,.1),
+h8 <- fit.foi(lambda.guess = c(1,.1,.1,.1),
                    data.in=all.age,
-                   hyp = 7,
+                   hyp = 8,
                    lower_age_bin_vector=c(0,1,2,3),
                    do.plot = TRUE)
 
-h8 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1),
+h9 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1),
                     data.in=all.age,
-                    hyp = 8,
+                    hyp = 9,
                     lower_age_bin_vector=c(0,1,2,3,4),
                     do.plot = TRUE)
 
 #not as good - no need for class age 5
-h9 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1),
+h10 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1),
                      data.in=all.age,
-                     hyp = 9,
+                     hyp = 10,
                      lower_age_bin_vector=c(0,1,2,3,4,5),
                      do.plot = TRUE)
 
+#add the half year? better!
+h11 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1),
+              data.in=all.age,
+              hyp = 11,
+              lower_age_bin_vector=c(0,0.5,1,2,3,4),
+              do.plot = TRUE)
+
+
 #now, add to the rest of the ages from 4
 #gets a lot better
-h10 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1),
+h12 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1),
                       data.in=all.age,
-                      hyp = 10,
-                      lower_age_bin_vector=c(0,1,2,3,4,10,20,30, 40, 50, 60,70,80),
+                      hyp = 12,
+                      lower_age_bin_vector=c(0,.5,1,2,3,4,10,20,30, 40, 50, 60,70,80),
                       do.plot = TRUE)
 
-#80 is too high - 70 is sufficient
-h11 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1),
+#better - 80 is too high
+h13 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1),
                             data.in=all.age,
-                            hyp = 11,
-                            lower_age_bin_vector=c(0,1,2,3,4,10,20,30, 40, 50,60, 70),
+                            hyp = 13,
+                            lower_age_bin_vector=c(0,0.5,1,2,3,4,10,20,30, 40, 50,60, 70),
                             do.plot = TRUE)
 
 #not enough if you stop at 50
-h12 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1),
-                            data.in=all.age,
-                            hyp = 12,
-                            lower_age_bin_vector=c(0,1,2,3,4,10,20,30, 40, 50, 60),
-                            do.plot = TRUE)
+h14 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1),
+               data.in=all.age,
+               hyp = 14,
+               lower_age_bin_vector=c(0,0.5,1,2,3,4,10,20,30, 40, 50,60),
+               do.plot = TRUE)
+
 
 
 #what about losing some classes in the middle?
 #even better
-h13 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1),
-                                data.in=all.age,
-                                hyp = 13,
-                                lower_age_bin_vector=c(0,1,2,3,4,10,30, 40, 50, 60,70),
-                                do.plot = TRUE)
-#and keep at it
-h14 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1,.1),
-                                data.in=all.age,
-                                hyp = 14,
-                                lower_age_bin_vector=c(0,1,2,3,4,10,30, 50, 60,70),
-                                do.plot = TRUE)
-
-#and again - same as h14 - but fewer pars
-h15 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1),
+h15 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1),
                                 data.in=all.age,
                                 hyp = 15,
-                                lower_age_bin_vector=c(0,1,2,3,4,10,30,60,70),
+                                lower_age_bin_vector=c(0,0.5,1,2,3,4,10,30, 40, 50, 60,70),
+                                do.plot = TRUE)
+#and keep at it
+h16 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1),
+                                data.in=all.age,
+                                hyp = 16,
+                                lower_age_bin_vector=c(0,0.5,1,2,3,4,10,30, 50, 60,70),
+                                do.plot = TRUE)
+
+#and again - same as h16 - but fewer pars
+h17 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1,.1),
+                                data.in=all.age,
+                                hyp = 17,
+                                lower_age_bin_vector=c(0,0.5,1,2,3,4,10,30,60,70),
                                 do.plot = TRUE)
 
 #not as good
-h16 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1),
+h18 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1),
                                 data.in=all.age,
-                                hyp = 16,
-                                lower_age_bin_vector=c(0,1,2,3,4,10,30,70),
+                                hyp = 18,
+                                lower_age_bin_vector=c(0,0.5,1,2,3,4,10,30,70),
                                 do.plot = TRUE)
 
-#best yet - fwer pars (8)
-h17 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1),
+#best yet - fewer pars (9)
+h19 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1),
                                 data.in=all.age,
-                                hyp = 17,
-                                lower_age_bin_vector=c(0,1,2,3,4,10,60,70),
+                                hyp = 19,
+                                lower_age_bin_vector=c(0,0.5,1,2,3,4,10,60,70),
                                 do.plot = TRUE)
 
 #not as good - but pretty close
-h18 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1),
-                                data.in=all.age,
-                                hyp = 18,
-                                lower_age_bin_vector=c(0,1,2,3,4,60,70),
-                                do.plot = TRUE)
-
-#not as good - but close
-h19 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1),
-                                data.in=all.age,
-                                hyp = 19,
-                                lower_age_bin_vector=c(0,1,2,3,4,5,60,70),
-                                do.plot = TRUE)
-
-#best yet
 h20 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1),
                                 data.in=all.age,
                                 hyp = 20,
-                                lower_age_bin_vector=c(0,1,2,3,4,20,60,70),
+                                lower_age_bin_vector=c(0,0.5,1,2,3,4,60,70),
                                 do.plot = TRUE)
 
-#too many, no need to add
+#not as good - but close
 h21 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1),
                                 data.in=all.age,
                                 hyp = 21,
-                                lower_age_bin_vector=c(0,1,2,3,4,10,20,60,70),
+                                lower_age_bin_vector=c(0,0.5,1,2,3,4,5,60,70),
+                                do.plot = TRUE)
+
+#best yet
+h22 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1),
+                                data.in=all.age,
+                                hyp = 22,
+                                lower_age_bin_vector=c(0,0.5,1,2,3,4,20,60,70),
+                                do.plot = TRUE)
+
+#this is the best fit of all modeled
+h23 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1,.1),
+                                data.in=all.age,
+                                hyp = 23,
+                                lower_age_bin_vector=c(0,0.5,1,2,3,4,10,20,60,70),
                                 do.plot = TRUE)
 
 #is 20 too high? 15 is worse actually
-h22 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1),
+h24 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1,.1),
                                 data.in=all.age,
-                                hyp = 22,
-                                lower_age_bin_vector=c(0,1,2,3,4,15,60,70),
+                                hyp = 24,
+                                lower_age_bin_vector=c(0,0.5,1,2,3,4,10,15,60,70),
                                 do.plot = TRUE)
 #is 20 too low? - 25 the same as 20
-h23 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1),
+h25 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1,.1),
                                 data.in=all.age,
-                                hyp = 23,
-                                lower_age_bin_vector=c(0,1,2,3,4,25,60,70),
+                                hyp = 25,
+                                lower_age_bin_vector=c(0,0.5,1,2,3,4,25,60,70),
                                 do.plot = TRUE)
 
 #30 too high
-h24 <- fit.foi(lambda.guess = c(1,.1,.1,.1,.1,.1,.1,.1),
+h26 <- fit.foi(lambda.guess = c(1,0.5,.1,.1,.1,.1,.1,.1,.1),
                                 data.in=all.age,
-                                hyp = 24,
-                                lower_age_bin_vector=c(0,1,2,3,4,30,60,70),
+                                hyp = 26,
+                                lower_age_bin_vector=c(0,0.5,1,2,3,4,30,60,70),
                                 do.plot = TRUE)
 
 # and compare against all ages - did not converge - 
 # but gives a sense of a similar shape
-h25 <- fit.foi(lambda.guess = rep(.1,90),
+h27 <- fit.foi(lambda.guess = rep(.1,91),
                                 data.in=all.age,
-                                hyp = 25,
-                                lower_age_bin_vector=0:89,
+                                hyp = 27,
+                                lower_age_bin_vector=c(0,0.5,1:89),
                                 do.plot = TRUE)
 
 
 # and combine the hypotheses into a table
-dat.all <- rbind(h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12,h13,h14,h15,h16,h17,h18,h19,h20,h21,h22,h23,h24,h25)
+dat.all <- rbind(h0,h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12,h13,h14,h15,h16,h17,h18,h19,h20,h21,h22,h23,h24,h25,h26,h27)
 
 #simplify 
 dat.table <- ddply(dat.all,.(hyp), summarise, npar = unique(npar), neg_llik=unique(neg_llik), AIC=unique(AIC), convergence = unique(convergence))
 dat.table$convergence[dat.table$convergence==0] <- "yes"
 dat.table$convergence[dat.table$convergence==1] <- "no"
 dat.table$convergence[dat.table$convergence==52] <- "no"
-write.csv(dat.table, file = paste0(homewd, "/data/Table_SX_foi.csv"), row.names = F)
+dat.table$neg_llik <- round(dat.table$neg_llik,2)
+dat.table$AIC <- round(dat.table$AIC,2)
+write.csv(dat.table, file = paste0(homewd, "/data/Table_S2A.csv"), row.names = F)
+dat.table[dat.table$AIC==min(dat.table$AIC),]
+h25
+
+dat.tableB <- h25
+dat.tableB$foi <- round(dat.tableB$foi,2)
+dat.tableB$foi_lci <- round(dat.tableB$foi_lci,2)
+dat.tableB$foi_uci <- round(dat.tableB$foi_uci,2)
+dat.tableB$neg_llik <- round(dat.tableB$neg_llik,2)
+dat.tableB$AIC <- round(dat.tableB$AIC,2)
+
+dat.tableB <- dplyr::select(dat.tableB, age_bin_lower, age_bin_upper, npar, foi, foi_lci, foi_uci, neg_llik, AIC, convergence)
+write.csv(dat.tableB, file = paste0(homewd, "/data/Table_S2B.csv"), row.names = F)
 
 #and the final shape for the actual figure
 fig.2 <- function(lambda, lambda_lci, lambda_uci, data.in, lower_age_bin_vector,do.save, filename){
@@ -470,6 +503,7 @@ fig.2 <- function(lambda, lambda_lci, lambda_uci, data.in, lower_age_bin_vector,
     
     pall <- cowplot::plot_grid(p1,p2, labels = c("A", "B"), label_size = 22)
   
+    print(pall)
     
     if(do.save==TRUE){
       ggsave(file = filename,
@@ -484,11 +518,11 @@ fig.2 <- function(lambda, lambda_lci, lambda_uci, data.in, lower_age_bin_vector,
   
 }
 
-fig.2(lambda = h20$foi,
-      lambda_lci = h20$foi_lci,
-      lambda_uci = h20$foi_uci,
+fig.2(lambda = h25$foi,
+      lambda_lci = h25$foi_lci,
+      lambda_uci = h25$foi_uci,
       data.in = all.age,
-      lower_age_bin_vector = c(0,1,2,3,4,20,60,70),
+      lower_age_bin_vector = c(0,0.5,1,2,3,4,25,60,70),
       do.save=TRUE,
       filename = paste0(homewd, "/figures/Fig2.png"))
 
