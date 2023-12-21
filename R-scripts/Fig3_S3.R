@@ -181,18 +181,71 @@ merge.dat$meanTemp <- approx(x=clim.sum$time, y=clim.sum$meanTemp, xout = merge.
 head(merge.dat)
 
 library(sjPlot)
+# Now, load prior script to calculate and plot random effects:
+source(paste0(homewd, "/R-scripts/mollentze-streicker-2020-functions.R"))
+
+plot.partial <- function(df, var, response_var){
+  df1 = df$effects
+  df2= df$partialResiduals
+  #head(df2)
+  
+  #head(df1)
+  names(df1)[names(df1)==var] <- "var"
+  names(df2)[names(df2)==var] <- "var"
+  
+  fillz = c("No"="gray70", "Yes" = "skyblue3")
+  
+  
+  p2 <- ggplot(data=df2, aes(var,  Residual)) +
+    geom_boxplot(aes(var~Residual))
+  
+  p1 <- ggplot(data=df1, aes(var, y)) + facet_grid(~facet) +
+    geom_crossbar(aes(ymin=ylower, ymax=yupper, fill=IsSignificant), 
+                  alpha=.4, show.legend = F) +
+    #geom_point(aes(x=var, y=y, color=var), size=5) +
+    #geom_jitter(data=df2, aes(x=var, y=Residual), width=.1, alpha=.2, size=.3)+
+    scale_fill_manual(values = fillz) +
+    geom_hline(aes(yintercept=0), linetype=2) + theme_bw() +
+    theme(panel.grid = element_blank(), axis.title.x = element_blank(),
+          axis.text = element_text(size=13, angle = 90),
+          axis.title.y = element_text(size=16, angle = 90),
+          strip.text = element_text(size=18),
+          strip.background = element_rect(fill="white"),
+          legend.text = element_text(size=10),
+          plot.margin = unit(c(.1,.1,.1,.1), "cm"))+
+    ylab("partial effect")
+    #ylab(paste0("partial effect on ", response_var)) 
+  
+  #print(p1)
+  
+  return(p1)
+}
+
+
+
 merge.dat$year <- as.numeric(as.character(merge.dat$year))
+
 
 #precip - increasing
 gam1 <- gam(sum_precip~year +  s(week, k=7, bs="cc"), data=merge.dat)
+merge.dat$year <- as.factor(merge.dat$year)
+gam1b <- gam(sum_precip~s(week, k=7, bs="cc")+ s(year, k=7, bs="re"), data=merge.dat)
 summary(gam1) # slight pos trend
 plot_model(gam1, type="pred", grid=T)
+
+#and plot patterns of year by random effect
+year.df <- get_partial_effects(fit=gam1b, var = "year")
+year.df$effects$facet <- "year (categorical)"
+
+FigS3Ac <- plot.partial(df=year.df, var="year", response_var = "weekly sum precipitation (mm)") #2020 is deviat
+
 
 precip.df <- get_model_data(gam1, type="pred", grid=T)
 precip.df$x[precip.df$group_col=="week"] <- precip.df$x[precip.df$group_col=="week"]*52
 precip.df$group_col <- as.character(precip.df$group_col)
-precip.df$group_col[precip.df$group_col=="week"] <- "week of year"
-precip.df$group_col <- factor(precip.df$group_col, levels=c("year", "week of year"))
+precip.df$group_col[precip.df$group_col=="week"] <- "week of year (numerical)"
+precip.df$group_col[precip.df$group_col=="year"] <- "year (numerical)"
+precip.df$group_col <- factor(precip.df$group_col, levels=c("year (numerical)", "week of year (numerical)"))
 
 FigS3A <- ggplot(data=precip.df) + facet_grid(~group_col,scales = "free_x") +
           geom_line(aes(x=x, y=predicted), size=1) + ylab("predicted sum precipitation (mm)") +
@@ -201,19 +254,33 @@ FigS3A <- ggplot(data=precip.df) + facet_grid(~group_col,scales = "free_x") +
           strip.background = element_rect(fill="white"),
           axis.title.y = element_text(size = 16),
           axis.title.x = element_blank(), axis.text = element_text(size = 13),
-          plot.margin = unit(c(.1,.1,.1,.9), "cm")) 
+          plot.margin = unit(c(.1,.1,.7,.9), "cm")) 
+
+FigS3Acombo <- cowplot::plot_grid(FigS3A, FigS3Ac, ncol = 2, rel_widths = c(1,.5))
+
 
 
 #humidity - also increasing
+merge.dat$year <- as.numeric(as.character(merge.dat$year))
 gam2 <- gam(mean_H2M~year +  s(week, k=7, bs="cc"), data=merge.dat)
+merge.dat$year <- as.factor(merge.dat$year)
+gam2b <- gam(mean_H2M~s(week, k=7, bs="cc")+ s(year, k=7, bs="re"), data=merge.dat)
 summary(gam2) # slight pos tred
 plot_model(gam2, type="pred", grid=T)
+
+#and plot patterns of year by random effect
+year.df.hum <- get_partial_effects(fit=gam2b, var = "year")
+year.df.hum$effects$facet <- "year (categorical)"
+
+FigS3Bc <- plot.partial(df=year.df.hum, var="year", response_var = "weekly mean humidity (%)") #2020 is deviat
+
 
 humid.df <- get_model_data(gam2, type="pred", grid=T)
 humid.df$x[humid.df$group_col=="week"] <- humid.df$x[humid.df$group_col=="week"]*52
 humid.df$group_col <- as.character(humid.df$group_col)
-humid.df$group_col[humid.df$group_col=="week"] <- "week of year"
-humid.df$group_col <- factor(humid.df$group_col, levels=c("year", "week of year"))
+humid.df$group_col[humid.df$group_col=="week"] <- "week of year (numerical)"
+humid.df$group_col[humid.df$group_col=="year"] <- "year (numerical)"
+humid.df$group_col <- factor(humid.df$group_col, levels=c("year (numerical)", "week of year (numerical)"))
 
 FigS3B <- ggplot(data=humid.df) + facet_grid(~group_col,scales = "free_x") +
   geom_line(aes(x=x, y=predicted), size=1) + ylab("predicted mean humidity (%)") +
@@ -222,20 +289,35 @@ FigS3B <- ggplot(data=humid.df) + facet_grid(~group_col,scales = "free_x") +
         strip.background = element_rect(fill="white"),
         axis.title.y = element_text(size = 16),
         axis.title.x = element_blank(), axis.text = element_text(size = 13),
-        plot.margin = unit(c(.1,.1,.1,.9), "cm")) 
+        plot.margin = unit(c(.1,.1,.7,.9), "cm")) 
+
+
+FigS3Bcombo <- cowplot::plot_grid(FigS3B, FigS3Bc, ncol = 2, rel_widths = c(1,.5))
+
 
 
 #temp - increasing
+merge.dat$year <- as.numeric(as.character(merge.dat$year))
 gam3 <- gam(meanTemp~year +  s(week, k=7, bs="cc"), data=merge.dat)
+merge.dat$year <- as.factor(merge.dat$year)
+gam3b <- gam(meanTemp~s(week, k=7, bs="cc")+ s(year, k=7, bs="re"), data=merge.dat)
 summary(gam3) # pos trend
 plot_model(gam3, type="pred", grid=T)
+
+
+#and plot patterns of year by random effect
+year.df.temp <- get_partial_effects(fit=gam3b, var = "year")
+year.df.temp$effects$facet <- "year (categorical)"
+
+
 
 
 temp.df <- get_model_data(gam3, type="pred", grid=T)
 temp.df$x[temp.df$group_col=="week"] <- temp.df$x[temp.df$group_col=="week"]*52
 temp.df$group_col <- as.character(temp.df$group_col)
-temp.df$group_col[temp.df$group_col=="week"] <- "week of year"
-temp.df$group_col <- factor(temp.df$group_col, levels=c("year", "week of year"))
+temp.df$group_col[temp.df$group_col=="week"] <- "week of year (numerical)"
+temp.df$group_col[temp.df$group_col=="year"] <- "year (numerical)"
+temp.df$group_col <- factor(temp.df$group_col, levels=c("year (numerical)", "week of year (numerical)"))
 
 FigS3C <- ggplot(data=temp.df) + facet_grid(~group_col,scales = "free_x") +
   geom_line(aes(x=x, y=predicted), size=1) + 
@@ -245,18 +327,28 @@ FigS3C <- ggplot(data=temp.df) + facet_grid(~group_col,scales = "free_x") +
         strip.background = element_rect(fill="white"),
         axis.title.y = element_text(size = 16),
         axis.title.x = element_blank(), axis.text = element_text(size = 13),
-        plot.margin = unit(c(.1,.1,.1,.9), "cm")) 
+        plot.margin = unit(c(.1,.1,.7,.9), "cm")) 
+
+
+FigS3Cc <- plot.partial(df=year.df.temp, var="year", response_var = "weekly mean temperature")
+
+
+FigS3Ccombo <- cowplot::plot_grid(FigS3C, FigS3Cc, ncol = 2, rel_widths = c(1,.5))
+
+
 
 #what about cases??? decreasing - 
 #contradictory effects of increasing humidity (driving cases down) and increasing precip (driving cases up)
+merge.dat$year <- as.numeric(as.character(merge.dat$year))
 gam4 <- gam(cases~year +  s(week, k=7, bs="cc"), data=merge.dat, family = "poisson")
 summary(gam4) # neg trend not significant
 case.df <- get_model_data(gam4, type="pred", grid=T)
 
 case.df$x[case.df$group_col=="week"] <- case.df$x[case.df$group_col=="week"]*52
 case.df$group_col <- as.character(case.df$group_col)
-case.df$group_col[case.df$group_col=="week"] <- "week of year"
-case.df$group_col <- factor(case.df$group_col, levels=c("year", "week of year"))
+case.df$group_col[case.df$group_col=="week"] <- "week of year (numerical)"
+case.df$group_col[case.df$group_col=="year"] <- "year (numerical)"
+case.df$group_col <- factor(case.df$group_col, levels=c("year (numerical)", "week of year (numerical)"))
 
 
 FigS3D <- ggplot(data=case.df) + facet_grid(~group_col,scales = "free_x") +
@@ -270,15 +362,34 @@ FigS3D <- ggplot(data=case.df) + facet_grid(~group_col,scales = "free_x") +
         plot.margin = unit(c(.1,.1,.1,.9), "cm")) 
 
 
+merge.dat$year <- as.factor(merge.dat$year)
+gam4b <- gam(cases~s(week, k=7, bs="cc")+ s(year, k=7, bs="re"), data=merge.dat, family = "poisson")
+
+#and plot patterns of year by random effect
+year.df.case <- get_partial_effects(fit=gam4b, var = "year")
+year.df.case$effects$facet <- "year (categorical)"
+
+
+FigS3Dc <- plot.partial(df=year.df.case, var="year", response_var = "weekly cases")
+
+
+FigS3Dcombo <- cowplot::plot_grid(FigS3D, FigS3Dc, ncol = 2, rel_widths = c(1,.5))
+
+
+
 
 
 FigS3 <- cowplot::plot_grid(FigS3A, FigS3B, FigS3C, FigS3D, ncol=1, nrow=4, labels=c("A", "B", "C", "D"), label_size = 22, align = "hv")
 
 
+
+FigS3 <- cowplot::plot_grid(FigS3Acombo, FigS3Bcombo, FigS3Ccombo, FigS3Dcombo, ncol=1, nrow=4, labels=c("A", "B", "C", "D"), label_size = 22, align = "hv")
+
+
 ggsave(file = paste0(homewd, "/figures/FigS3.png"),
        plot = FigS3,
        units="mm",  
-       width=70, 
+       width=90, 
        height=115, 
        scale=3, 
        dpi=300)
