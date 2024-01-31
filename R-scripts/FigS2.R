@@ -58,6 +58,7 @@ unique(dat$hospital)
 dat$hospital[dat$hospital=="CENHOSOA "] <- "CENHOSOA"
 dat$hospital[dat$hospital=="CSMI TSL"] <- "CSMI-TSL"
 nrow(subset(dat, hospital== "")) #25 with no hospital ID
+unique(dat$sampling_date[dat$hospital==""]) #all in 2010
 #remove from dataset
 dat = subset(dat, hospital!="") #4152
 #now plot cases by time and fit a gam describing seasonality
