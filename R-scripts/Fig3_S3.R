@@ -232,6 +232,7 @@ merge.dat$year <- as.factor(merge.dat$year)
 gam1b <- gam(sum_precip~s(week, k=7, bs="cc")+ s(year, k=7, bs="re"), data=merge.dat)
 summary(gam1) # slight pos trend
 plot_model(gam1, type="pred", grid=T)
+summary(gam1b)
 
 #and plot patterns of year by random effect
 year.df <- get_partial_effects(fit=gam1b, var = "year")
@@ -267,6 +268,7 @@ merge.dat$year <- as.factor(merge.dat$year)
 gam2b <- gam(mean_H2M~s(week, k=7, bs="cc")+ s(year, k=7, bs="re"), data=merge.dat)
 summary(gam2) # slight pos tred
 plot_model(gam2, type="pred", grid=T)
+summary(gam2b) 
 
 #and plot patterns of year by random effect
 year.df.hum <- get_partial_effects(fit=gam2b, var = "year")
@@ -303,6 +305,7 @@ merge.dat$year <- as.factor(merge.dat$year)
 gam3b <- gam(meanTemp~s(week, k=7, bs="cc")+ s(year, k=7, bs="re"), data=merge.dat)
 summary(gam3) # pos trend
 plot_model(gam3, type="pred", grid=T)
+summary(gam3b) 
 
 
 #and plot patterns of year by random effect
@@ -364,7 +367,7 @@ FigS3D <- ggplot(data=case.df) + facet_grid(~group_col,scales = "free_x") +
 
 merge.dat$year <- as.factor(merge.dat$year)
 gam4b <- gam(cases~s(week, k=7, bs="cc")+ s(year, k=7, bs="re"), data=merge.dat, family = "poisson")
-
+summary(gam4b) 
 #and plot patterns of year by random effect
 year.df.case <- get_partial_effects(fit=gam4b, var = "year")
 year.df.case$effects$facet <- "year (categorical)"
